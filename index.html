@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -152,7 +153,9 @@
   <div class="card" style="margin-top:24px;">
     <div class="login-icon">🔐</div>
     <h2 style="text-align:center; margin-bottom:16px;">Iniciar Sesión</h2>
-    <input type="text" id="login-usuario" placeholder="Usuario" />
+    <select id="login-usuario">
+      <option value="">Seleccioná tu nombre...</option>
+    </select>
     <input type="password" id="login-password" placeholder="Contraseña" />
     <div id="login-error" class="error-msg" style="display:none;">Usuario o contraseña incorrectos</div>
     <button class="btn btn-primary" onclick="iniciarSesion()">Entrar</button>
@@ -534,11 +537,36 @@ function verTab(tab) {
   document.getElementById('tab-operarios').className = 'nav-tab' + (tab === 'operarios' ? ' activo' : '');
 }
 
+// Cargar usuarios en el dropdown
+async function cargarUsuariosDropdown() {
+  const sel = document.getElementById('login-usuario');
+  try {
+    const data = await sbFetch('usuarios?order=nombre.asc');
+    if (data && data.length > 0) {
+      data.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.nombre;
+        opt.textContent = u.nombre;
+        sel.appendChild(opt);
+      });
+      return;
+    }
+  } catch(e) {}
+  // Fallback demo
+  ['Admin','Juan Pérez','María García','Cristian Fierro','Juan Pablo Romero','Gaston Gallinger','Ezequiel Seija'].forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    sel.appendChild(opt);
+  });
+}
+
 // Enter en login
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) iniciarSesion();
 });
+
+// Inicializar
+cargarUsuariosDropdown();
 </script>
 </body>
 </html>
-
