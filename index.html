@@ -245,8 +245,9 @@ async function sbFetch(path, method = 'GET', body = null) {
   };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
-  if (!res.ok) { console.error(await res.text()); return null; }
-  return res.json();
+  if (!res.ok) { console.error('sbFetch error:', res.status, await res.text()); return null; }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
 }
 
 // ===== CHECKLIST ITEMS =====
@@ -912,10 +913,19 @@ async function editarItem(id) {
 // Cargar usuarios en el dropdown
 async function cargarUsuariosDropdown() {
   const sel = document.getElementById('login-usuario');
-  // Limpiar opciones existentes excepto la primera
   while (sel.options.length > 1) sel.remove(1);
+  
+  // Opción de carga
+  const loadOpt = document.createElement('option');
+  loadOpt.value = '';
+  loadOpt.textContent = 'Cargando...';
+  loadOpt.disabled = true;
+  sel.appendChild(loadOpt);
+
   try {
     const data = await sbFetch('usuarios?order=nombre.asc');
+    // Quitar "Cargando..."
+    while (sel.options.length > 1) sel.remove(1);
     if (data && data.length > 0) {
       data.forEach(u => {
         const opt = document.createElement('option');
@@ -925,7 +935,9 @@ async function cargarUsuariosDropdown() {
       });
       return;
     }
-  } catch(e) {}
+  } catch(e) {
+    while (sel.options.length > 1) sel.remove(1);
+  }
   // Fallback demo
   ['Admin','Cristian Fierro','Juan Pablo Romero','Gaston Gallinger','Ezequiel Seija'].forEach(n => {
     const opt = document.createElement('option');
@@ -944,7 +956,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.9 – 10/05/2026 21:15
+  v2.0 – 10/05/2026 21:30
 </div>
 
 </body>
