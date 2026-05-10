@@ -216,14 +216,14 @@
       <h2 style="color:#e65c00;">Panel Admin</h2>
       <span class="tag-admin">ADMIN</span>
     </div>
-    <div class="nav-tabs">
+    <div class="nav-tabs" style="flex-wrap:wrap;">
       <div class="nav-tab activo" id="tab-informes" onclick="verTab('informes')">📋 Informes</div>
-      <div class="nav-tab" id="tab-operarios" onclick="verTab('operarios')">👷 Operarios</div>
       <div class="nav-tab" id="tab-checklist" onclick="verTab('checklist')">⚙️ Checklist</div>
+      <div class="nav-tab" id="tab-usuarios" onclick="verTab('usuarios')">👤 Usuarios</div>
     </div>
     <div id="admin-informes"></div>
-    <div id="admin-operarios" style="display:none;"></div>
     <div id="admin-checklist" style="display:none;"></div>
+    <div id="admin-usuarios" style="display:none;"></div>
     <button class="btn btn-secondary" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>
   </div>
 </div>
@@ -640,12 +640,99 @@ async function cargarAdmin() {
 
 function verTab(tab) {
   document.getElementById('admin-informes').style.display = tab === 'informes' ? 'block' : 'none';
-  document.getElementById('admin-operarios').style.display = tab === 'operarios' ? 'block' : 'none';
   document.getElementById('admin-checklist').style.display = tab === 'checklist' ? 'block' : 'none';
+  document.getElementById('admin-usuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
   document.getElementById('tab-informes').className = 'nav-tab' + (tab === 'informes' ? ' activo' : '');
-  document.getElementById('tab-operarios').className = 'nav-tab' + (tab === 'operarios' ? ' activo' : '');
   document.getElementById('tab-checklist').className = 'nav-tab' + (tab === 'checklist' ? ' activo' : '');
+  document.getElementById('tab-usuarios').className = 'nav-tab' + (tab === 'usuarios' ? ' activo' : '');
   if (tab === 'checklist') cargarAdminChecklist();
+  if (tab === 'usuarios') cargarAdminUsuarios();
+}
+
+async function cargarAdminUsuarios() {
+  const cont = document.getElementById('admin-usuarios');
+  cont.innerHTML = '<p style="color:#888; font-size:0.85rem;">Cargando...</p>';
+
+  let usuarios = [];
+  try {
+    const data = await sbFetch('usuarios?order=nombre.asc');
+    if (data) usuarios = data;
+  } catch(e) {}
+
+  const listaHTML = usuarios.map(u => `
+    <div class="informe-card" style="margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:0.88rem;">${u.nombre}</div>
+          <div style="font-size:0.75rem; color:#888;">${u.role === 'admin' ? '👑 Admin' : '👷 Operario'}</div>
+        </div>
+        <button onclick="cambiarClave(${JSON.stringify(u.id)}, '${u.nombre.replace(/'/g, "\\'")}')" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.78rem;">🔑 Clave</button>
+        <button onclick="eliminarUsuario(${JSON.stringify(u.id)}, '${u.nombre.replace(/'/g, "\\'")}')" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.78rem;">🗑</button>
+      </div>
+    </div>`).join('');
+
+  cont.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
+      <!-- IZQUIERDA: Formulario -->
+      <div class="card" style="margin-bottom:0;">
+        <h2 style="margin-bottom:12px;">➕ Nuevo usuario</h2>
+        <input type="text" id="nuevo-user-nombre" placeholder="Nombre completo" />
+        <input type="password" id="nuevo-user-clave" placeholder="Contraseña" />
+        <select id="nuevo-user-rol">
+          <option value="operario">👷 Operario</option>
+          <option value="admin">👑 Admin</option>
+        </select>
+        <button class="btn btn-primary" onclick="agregarUsuario()">Agregar usuario</button>
+      </div>
+      <!-- DERECHA: Lista -->
+      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:70vh;">
+        <h2 style="margin-bottom:12px;">👥 Usuarios actuales</h2>
+        ${listaHTML || '<div class="empty-state"><div class="icon">👤</div><p>Sin usuarios.</p></div>'}
+      </div>
+    </div>`;
+}
+
+async function agregarUsuario() {
+  const nombre = document.getElementById('nuevo-user-nombre').value.trim();
+  const password = document.getElementById('nuevo-user-clave').value.trim();
+  const role = document.getElementById('nuevo-user-rol').value;
+  if (!nombre || !password) { alert('Completá nombre y contraseña'); return; }
+  try {
+    await sbFetch('usuarios', 'POST', { nombre, password, role });
+    await cargarUsuariosDropdown();
+    await cargarAdminUsuarios();
+    document.getElementById('nuevo-user-nombre').value = '';
+    document.getElementById('nuevo-user-clave').value = '';
+  } catch(e) { alert('Error al agregar usuario.'); }
+}
+
+async function cambiarClave(id, nombre) {
+  const nuevaClave = prompt(`Nueva contraseña para ${nombre}:`);
+  if (!nuevaClave) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/usuarios?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: nuevaClave })
+    });
+    alert(`✅ Clave de ${nombre} actualizada.`);
+    await cargarAdminUsuarios();
+  } catch(e) { alert('Error al cambiar clave.'); }
+}
+
+async function eliminarUsuario(id, nombre) {
+  if (!confirm(`¿Eliminás al usuario ${nombre}?`)) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/usuarios?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    // Refrescar dropdown
+    const sel = document.getElementById('login-usuario');
+    while (sel.options.length > 1) sel.remove(1);
+    await cargarUsuariosDropdown();
+    await cargarAdminUsuarios();
+  } catch(e) { alert('Error al eliminar usuario.'); }
 }
 
 async function cargarAdminChecklist() {
@@ -855,7 +942,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.7 – 10/05/2026 20:30
+  v1.8 – 10/05/2026 21:00
 </div>
 
 </body>
