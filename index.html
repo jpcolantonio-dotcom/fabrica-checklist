@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -220,9 +221,11 @@
     <div class="nav-tabs">
       <div class="nav-tab activo" id="tab-informes" onclick="verTab('informes')">📋 Informes</div>
       <div class="nav-tab" id="tab-operarios" onclick="verTab('operarios')">👷 Operarios</div>
+      <div class="nav-tab" id="tab-checklist" onclick="verTab('checklist')">⚙️ Checklist</div>
     </div>
     <div id="admin-informes"></div>
     <div id="admin-operarios" style="display:none;"></div>
+    <div id="admin-checklist" style="display:none;"></div>
     <button class="btn btn-secondary" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>
   </div>
 </div>
@@ -249,11 +252,18 @@ async function sbFetch(path, method = 'GET', body = null) {
 }
 
 // ===== CHECKLIST ITEMS =====
-const ITEMS = [
+let ITEMS = [
   { id: 1, titulo: "Puertas cerradas – Depósito de Harinas", descripcion: "Verificar que todas las puertas del depósito de harinas estén correctamente cerradas y aseguradas." },
   { id: 2, titulo: "Piso listo – Depósito de Harinas", descripcion: "Confirmar que el piso del depósito de harinas esté limpio y libre de residuos." },
   { id: 3, titulo: "Cortina depósito harinas limpia", descripcion: "Revisar que la cortina del depósito de harinas esté limpia y en buen estado." },
 ];
+
+async function cargarItems() {
+  try {
+    const data = await sbFetch('checklist_items?activo=eq.true&order=orden.asc');
+    if (data && data.length > 0) ITEMS = data;
+  } catch(e) {}
+}
 
 // ===== ESTADO =====
 let usuario = null;
@@ -341,15 +351,67 @@ function renderItem() {
       </div>
       <div class="item-descripcion">💡 ${item.descripcion}</div>
       <div class="btns-row">
-        <button class="btn btn-conforme" onclick="responder(true)">✅ Conforme</button>
-        <button class="btn btn-noconforme" onclick="responder(false)">❌ No conforme</button>
+        <button id="btn-conforme" class="btn btn-conforme" style="opacity:0.5;" onclick="seleccionarEstado(true)">✅ Conforme</button>
+        <button id="btn-noconforme" class="btn btn-noconforme" style="opacity:0.5;" onclick="seleccionarEstado(false)">❌ No conforme</button>
       </div>
       <label class="foto-label" for="foto-input">📷 Agregar foto (opcional)</label>
       <input type="file" id="foto-input" accept="image/*" capture="environment" style="display:none" onchange="previewFoto(this)" />
       <img id="foto-preview" class="foto-preview" />
       <textarea id="obs-input" placeholder="Observaciones (opcional)..."></textarea>
+      <button id="btn-continuar" class="btn btn-primary btn-disabled" onclick="confirmarItem()">Continuar →</button>
     </div>
   `;
+}
+
+let estadoActual = null;
+
+function seleccionarEstado(conforme) {
+  estadoActual = conforme;
+  const btnOk = document.getElementById('btn-conforme');
+  const btnNo = document.getElementById('btn-noconforme');
+  const btnCont = document.getElementById('btn-continuar');
+
+  if (conforme) {
+    btnOk.style.opacity = '1';
+    btnOk.style.transform = 'scale(1.05)';
+    btnNo.style.opacity = '0.4';
+    btnNo.style.transform = 'scale(1)';
+  } else {
+    btnNo.style.opacity = '1';
+    btnNo.style.transform = 'scale(1.05)';
+    btnOk.style.opacity = '0.4';
+    btnOk.style.transform = 'scale(1)';
+  }
+
+  btnCont.classList.remove('btn-disabled');
+}
+
+async function confirmarItem() {
+  if (estadoActual === null) return;
+  const obs = document.getElementById('obs-input')?.value || '';
+  const fotoInput = document.getElementById('foto-input');
+  let fotoUrl = null;
+  if (fotoInput && fotoInput.files && fotoInput.files[0]) {
+    fotoUrl = await subirFoto(fotoInput.files[0], ITEMS[itemActual].id);
+  }
+
+  respuestas.push({
+    id: ITEMS[itemActual].id,
+    titulo: ITEMS[itemActual].titulo,
+    conforme: estadoActual,
+    observacion: obs,
+    foto: fotoUrl
+  });
+
+  estadoActual = null;
+  itemActual++;
+  if (itemActual < ITEMS.length) {
+    renderItem();
+  } else {
+    document.getElementById('progreso-fill').style.width = '100%';
+    document.getElementById('progreso-texto').textContent = `${ITEMS.length} / ${ITEMS.length} completados`;
+    iniciarFirma();
+  }
 }
 
 function previewFoto(input) {
@@ -555,8 +617,103 @@ async function cargarAdmin() {
 function verTab(tab) {
   document.getElementById('admin-informes').style.display = tab === 'informes' ? 'block' : 'none';
   document.getElementById('admin-operarios').style.display = tab === 'operarios' ? 'block' : 'none';
+  document.getElementById('admin-checklist').style.display = tab === 'checklist' ? 'block' : 'none';
   document.getElementById('tab-informes').className = 'nav-tab' + (tab === 'informes' ? ' activo' : '');
   document.getElementById('tab-operarios').className = 'nav-tab' + (tab === 'operarios' ? ' activo' : '');
+  document.getElementById('tab-checklist').className = 'nav-tab' + (tab === 'checklist' ? ' activo' : '');
+  if (tab === 'checklist') cargarAdminChecklist();
+}
+
+async function cargarAdminChecklist() {
+  const cont = document.getElementById('admin-checklist');
+  cont.innerHTML = '<p style="color:#888; font-size:0.85rem; margin-bottom:12px;">Cargando ítems...</p>';
+  
+  let items = [];
+  try {
+    const data = await sbFetch('checklist_items?order=orden.asc');
+    if (data) items = data;
+  } catch(e) {}
+
+  let html = `
+    <div class="card">
+      <h2>⚙️ Ítems del Checklist</h2>
+      <div id="items-lista">`;
+  
+  if (!items.length) {
+    html += `<div class="empty-state"><div class="icon">📝</div><p>No hay ítems todavía.</p></div>`;
+  } else {
+    items.forEach(it => {
+      html += `
+        <div class="informe-card" id="item-${it.id}" style="border-left-color:${it.activo ? '#e65c00' : '#ccc'}">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1;">
+              <div style="font-weight:600; font-size:0.9rem;">${it.titulo}</div>
+              <div style="font-size:0.78rem; color:#888; margin-top:2px;">${it.descripcion || ''}</div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              <button onclick="editarItem(${it.id})" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.8rem;">✏️</button>
+              <button onclick="eliminarItem(${it.id})" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.8rem;">🗑</button>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+
+  html += `</div>
+      <div style="margin-top:16px; border-top:1px solid #f0f0f0; padding-top:16px;">
+        <h2 style="margin-bottom:12px;">➕ Agregar ítem</h2>
+        <input type="text" id="nuevo-titulo" placeholder="Nombre del ítem (ej: Máquina 3 limpia)" />
+        <textarea id="nuevo-descripcion" placeholder="Descripción / instrucción para el operario (opcional)"></textarea>
+        <button class="btn btn-primary" onclick="agregarItem()">Agregar ítem</button>
+      </div>
+    </div>`;
+  
+  cont.innerHTML = html;
+}
+
+async function agregarItem() {
+  const titulo = document.getElementById('nuevo-titulo').value.trim();
+  const descripcion = document.getElementById('nuevo-descripcion').value.trim();
+  if (!titulo) { alert('Escribí el nombre del ítem'); return; }
+
+  try {
+    const items = await sbFetch('checklist_items?order=orden.desc&limit=1');
+    const orden = items && items.length > 0 ? (items[0].orden + 1) : 1;
+    await sbFetch('checklist_items', 'POST', { titulo, descripcion, orden, activo: true });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al agregar. Revisá la conexión.'); }
+}
+
+async function eliminarItem(id) {
+  if (!confirm('¿Eliminás este ítem del checklist?')) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al eliminar.'); }
+}
+
+async function editarItem(id) {
+  const nuevoTitulo = prompt('Nuevo nombre del ítem:');
+  if (!nuevoTitulo) return;
+  const nuevaDesc = prompt('Nueva descripción (opcional):') || '';
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ titulo: nuevoTitulo, descripcion: nuevaDesc })
+    });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al editar.'); }
 }
 
 // Cargar usuarios en el dropdown
@@ -589,9 +746,10 @@ document.addEventListener('keydown', e => {
 
 // Inicializar
 cargarUsuariosDropdown();
+cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.3 – 10/05/2026 18:30
+  v1.5 – 10/05/2026 19:40
 </div>
 
 </body>
