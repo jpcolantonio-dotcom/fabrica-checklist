@@ -1,0 +1,572 @@
+import { useState, useEffect } from "react";
+
+// ─────────────────────────────────────────────
+// 🔧 CONFIGURACIÓN SUPABASE
+// Reemplazá estos valores con los tuyos de Supabase
+// ─────────────────────────────────────────────
+const SUPABASE_URL = "https://vabhfvveskphnekmbgom.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QG6stpom6q0ThTiKzQRkRQ_Xfll2ehc";
+
+const sb = async (path, options = {}) => {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...options.headers,
+    },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+};
+
+// ─────────────────────────────────────────────
+// DATOS
+// ─────────────────────────────────────────────
+const CHECKLIST_ITEMS = [
+  { id: 1, zona: "Pisos", tarea: "Pisos limpios", icono: "🧹", descripcion: "Barrer y trapear todos los pisos del área de producción" },
+  { id: 2, zona: "Paredes", tarea: "Paredes limpias", icono: "🧽", descripcion: "Limpiar manchas y polvo de todas las paredes" },
+  { id: 3, zona: "Máquina 1", tarea: "Máquina 1 limpia", icono: "⚙️", descripcion: "Limpiar superficie, quitar residuos y dejar lista para el próximo turno" },
+  { id: 4, zona: "Máquina 2", tarea: "Máquina 2 limpia", icono: "🔩", descripcion: "Limpiar superficie, quitar residuos y dejar lista para el próximo turno" },
+];
+
+const DEMO_MODE = SUPABASE_URL === "TU_SUPABASE_URL";
+
+// Usuarios de demo (solo para prueba sin Supabase)
+const DEMO_USERS = [
+  { id: "admin", nombre: "Admin", role: "admin", password: "admin123" },
+  { id: "op1", nombre: "Juan Pérez", role: "operario", password: "1234" },
+  { id: "op2", nombre: "María García", role: "operario", password: "1234" },
+];
+
+let demoInformes = [];
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const fechaHoy = () => new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+const horaAhora = () => new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+const formatFecha = (iso) => new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const formatHora = (iso) => new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+
+// ─────────────────────────────────────────────
+// COMPONENTE PRINCIPAL
+// ─────────────────────────────────────────────
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [screen, setScreen] = useState("login");
+
+  const handleLogin = (u) => {
+    setUser(u);
+    setScreen(u.role === "admin" ? "admin" : "checklist");
+  };
+
+  const handleLogout = () => { setUser(null); setScreen("login"); };
+
+  if (screen === "login") return <Login onLogin={handleLogin} />;
+  if (screen === "admin") return <AdminPanel user={user} onLogout={handleLogout} />;
+  return <ChecklistFlow user={user} onLogout={handleLogout} />;
+}
+
+// ─────────────────────────────────────────────
+// LOGIN
+// ─────────────────────────────────────────────
+function Login({ onLogin }) {
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const login = async () => {
+    if (!usuario.trim() || !password.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      if (DEMO_MODE) {
+        const found = DEMO_USERS.find(u => u.nombre.toLowerCase() === usuario.toLowerCase() && u.password === password);
+        if (!found) throw new Error("Usuario o contraseña incorrectos");
+        onLogin(found);
+      } else {
+        const data = await sb(`usuarios?nombre=eq.${encodeURIComponent(usuario)}&password=eq.${encodeURIComponent(password)}&select=*`);
+        if (!data || data.length === 0) throw new Error("Usuario o contraseña incorrectos");
+        onLogin(data[0]);
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={S.bg}>
+      {DEMO_MODE && (
+        <div style={S.demoBanner}>
+          🔧 <strong>Modo demo</strong> — Conectá Supabase para usar en producción
+        </div>
+      )}
+      <div style={S.card}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 56 }}>🏭</div>
+          <h1 style={S.titulo}>FábricaCheck</h1>
+          <p style={S.sub}>Sistema de cierre de turno</p>
+        </div>
+        {DEMO_MODE && (
+          <div style={S.demoHint}>
+            <strong>Demo:</strong> Admin → usuario: <code>Admin</code> / pass: <code>admin123</code><br />
+            Operario → usuario: <code>Juan Pérez</code> / pass: <code>1234</code>
+          </div>
+        )}
+        <label style={S.label}>Usuario</label>
+        <input style={S.input} placeholder="Tu nombre de usuario" value={usuario} onChange={e => setUsuario(e.target.value)} />
+        <label style={{ ...S.label, marginTop: 12 }}>Contraseña</label>
+        <input style={S.input} type="password" placeholder="••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && login()} />
+        {error && <div style={S.errorMsg}>{error}</div>}
+        <button style={{ ...S.btnPrimary, marginTop: 20, opacity: loading ? 0.6 : 1 }} onClick={login} disabled={loading}>
+          {loading ? "Ingresando..." : "Ingresar →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// CHECKLIST FLOW (OPERARIO)
+// ─────────────────────────────────────────────
+function ChecklistFlow({ user, onLogout }) {
+  const [step, setStep] = useState("inicio"); // inicio | checklist | informe
+  const [current, setCurrent] = useState(0);
+  const [items, setItems] = useState([]);
+  const [horaInicio, setHoraInicio] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [informeGuardado, setInformeGuardado] = useState(null);
+
+  const iniciar = () => {
+    setItems(CHECKLIST_ITEMS.map(i => ({ ...i, status: "pendiente", timestamp: null })));
+    setHoraInicio(horaAhora());
+    setCurrent(0);
+    setStep("checklist");
+  };
+
+  const responder = async (status) => {
+    const updated = items.map((item, idx) =>
+      idx === current ? { ...item, status, timestamp: horaAhora() } : item
+    );
+    setItems(updated);
+    if (current < items.length - 1) {
+      setCurrent(current + 1);
+    } else {
+      // Guardar informe
+      setGuardando(true);
+      const informe = {
+        operario_id: user.id,
+        operario_nombre: user.nombre,
+        fecha: new Date().toISOString(),
+        hora_inicio: horaInicio,
+        hora_fin: horaAhora(),
+        items: updated,
+        total_realizados: updated.filter(i => i.status === "hecho").length,
+        total_no_realizados: updated.filter(i => i.status === "nohecho").length,
+      };
+      if (DEMO_MODE) {
+        demoInformes = [{ id: Date.now(), ...informe }, ...demoInformes];
+        setInformeGuardado(informe);
+      } else {
+        try {
+          await sb("informes", { method: "POST", body: JSON.stringify(informe) });
+          setInformeGuardado(informe);
+        } catch (e) {
+          setInformeGuardado(informe);
+        }
+      }
+      setGuardando(false);
+      setStep("informe");
+    }
+  };
+
+  if (step === "inicio") {
+    return (
+      <div style={S.bg}>
+        <div style={S.card}>
+          <div style={S.topBar}>
+            <span style={S.chip}>👷 {user.nombre}</span>
+            <button style={S.btnLogout} onClick={onLogout}>Salir</button>
+          </div>
+          <div style={{ textAlign: "center", margin: "24px 0 20px" }}>
+            <div style={{ fontSize: 52 }}>📋</div>
+            <h2 style={S.titulo}>Checklist de Cierre</h2>
+            <p style={S.sub}>{fechaHoy()}</p>
+          </div>
+          <div style={S.infoBox}>
+            <div style={S.infoBoxTitle}>Este turno revisarás:</div>
+            {CHECKLIST_ITEMS.map(item => (
+              <div key={item.id} style={S.previewItem}>
+                <span>{item.icono}</span>
+                <span>{item.tarea}</span>
+              </div>
+            ))}
+          </div>
+          <button style={{ ...S.btnPrimary, marginTop: 20 }} onClick={iniciar}>
+            Iniciar checklist →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "checklist") {
+    const item = items[current];
+    const completados = items.filter(i => i.status !== "pendiente").length;
+    return (
+      <div style={S.bg}>
+        <div style={S.card}>
+          <div style={S.topBar}>
+            <span style={S.chip}>👷 {user.nombre}</span>
+            <span style={{ ...S.chip, background: "#1a1a2e", color: "#fff" }}>{current + 1}/{items.length}</span>
+          </div>
+          <div style={S.progressBg}>
+            <div style={{ ...S.progressFill, width: `${(completados / items.length) * 100}%` }} />
+          </div>
+          <div style={S.miniRow}>
+            {items.map((it, idx) => (
+              <div key={it.id} style={{
+                ...S.miniDot,
+                background: idx === current ? "#FFC107" : it.status === "hecho" ? "#28a745" : it.status === "nohecho" ? "#dc3545" : "#e0e0e0",
+                transform: idx === current ? "scale(1.3)" : "scale(1)",
+              }} />
+            ))}
+          </div>
+          <div style={S.tareaBox}>
+            <div style={{ fontSize: 52, marginBottom: 8 }}>{item.icono}</div>
+            <div style={S.tareaZona}>{item.zona}</div>
+            <div style={S.tareaTitulo}>{item.tarea}</div>
+            <p style={S.tareaDesc}>{item.descripcion}</p>
+          </div>
+          <div style={S.botonesRow}>
+            <button style={S.btnNo} onClick={() => responder("nohecho")}>✗ No realizado</button>
+            <button style={S.btnSi} onClick={() => responder("hecho")}>✓ Realizado</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "informe") {
+    const hechos = items.filter(i => i.status === "hecho").length;
+    const noHechos = items.filter(i => i.status === "nohecho").length;
+    const todoOk = noHechos === 0;
+    return (
+      <div style={S.bg}>
+        <div style={{ ...S.card, maxWidth: 440 }}>
+          {guardando ? (
+            <div style={{ textAlign: "center", padding: 40 }}>
+              <div style={{ fontSize: 40 }}>⏳</div>
+              <p>Guardando informe...</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 52 }}>{todoOk ? "🎉" : "⚠️"}</div>
+                <h2 style={S.titulo}>{todoOk ? "¡Turno cerrado!" : "Cierre con observaciones"}</h2>
+                <p style={S.sub}>{fechaHoy()}</p>
+                <div style={{ ...S.chip, display: "inline-block", marginTop: 8, background: "#e8f5e9", color: "#2e7d32" }}>
+                  ✅ Informe guardado
+                </div>
+              </div>
+              <div style={S.resumenRow}>
+                <div style={{ ...S.resumenBox, background: "#e8f5e9" }}>
+                  <div style={S.resumenNum}>{hechos}</div>
+                  <div style={S.resumenLabel}>Realizadas</div>
+                </div>
+                <div style={{ ...S.resumenBox, background: noHechos > 0 ? "#ffebee" : "#f5f5f5" }}>
+                  <div style={S.resumenNum}>{noHechos}</div>
+                  <div style={S.resumenLabel}>No realizadas</div>
+                </div>
+              </div>
+              <div style={S.detalleSec}>
+                {items.map(item => (
+                  <div key={item.id} style={S.detalleRow}>
+                    <span style={{ fontSize: 20 }}>{item.icono}</span>
+                    <span style={{ flex: 1, fontSize: 14 }}>{item.tarea}</span>
+                    <span style={{
+                      ...S.badge,
+                      background: item.status === "hecho" ? "#e8f5e9" : "#ffebee",
+                      color: item.status === "hecho" ? "#2e7d32" : "#c62828",
+                    }}>
+                      {item.status === "hecho" ? "✓ Hecho" : "✗ Pendiente"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <button style={S.btnPrimary} onClick={() => setStep("inicio")}>Nuevo turno</button>
+              <button style={{ ...S.btnSecondary, marginTop: 8 }} onClick={onLogout}>Cerrar sesión</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// ADMIN PANEL
+// ─────────────────────────────────────────────
+function AdminPanel({ user, onLogout }) {
+  const [informes, setInformes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [filtroOp, setFiltroOp] = useState("todos");
+
+  useEffect(() => {
+    cargarInformes();
+  }, []);
+
+  const cargarInformes = async () => {
+    setLoading(true);
+    try {
+      if (DEMO_MODE) {
+        setInformes(demoInformes);
+      } else {
+        const data = await sb("informes?order=fecha.desc&select=*");
+        setInformes(data || []);
+      }
+    } catch (e) {
+      setInformes([]);
+    }
+    setLoading(false);
+  };
+
+  const operarios = ["todos", ...new Set(informes.map(i => i.operario_nombre))];
+  const filtrados = filtroOp === "todos" ? informes : informes.filter(i => i.operario_nombre === filtroOp);
+
+  if (selected) {
+    return <InformeDetalle informe={selected} onBack={() => setSelected(null)} />;
+  }
+
+  return (
+    <div style={S.bg}>
+      <div style={{ ...S.card, maxWidth: 500 }}>
+        <div style={S.topBar}>
+          <span style={{ ...S.chip, background: "#fff3cd", color: "#856404" }}>👑 {user.nombre}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={S.btnRefresh} onClick={cargarInformes}>↻</button>
+            <button style={S.btnLogout} onClick={onLogout}>Salir</button>
+          </div>
+        </div>
+
+        <h2 style={{ ...S.titulo, marginTop: 20, marginBottom: 4 }}>Panel Admin</h2>
+        <p style={S.sub}>Informes de cierre de turno</p>
+
+        {/* Estadísticas rápidas */}
+        <div style={S.statsRow}>
+          <div style={S.statBox}>
+            <div style={S.statNum}>{informes.length}</div>
+            <div style={S.statLabel}>Turnos totales</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={S.statNum}>{operarios.length - 1}</div>
+            <div style={S.statLabel}>Operarios</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={S.statNum}>
+              {informes.length > 0
+                ? Math.round(informes.reduce((acc, i) => acc + (i.total_realizados / (i.total_realizados + i.total_no_realizados)) * 100, 0) / informes.length)
+                : 0}%
+            </div>
+            <div style={S.statLabel}>Cumplimiento</div>
+          </div>
+        </div>
+
+        {/* Filtro por operario */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={S.label}>Filtrar por operario</label>
+          <select style={S.select} value={filtroOp} onChange={e => setFiltroOp(e.target.value)}>
+            {operarios.map(op => <option key={op} value={op}>{op === "todos" ? "Todos los operarios" : op}</option>)}
+          </select>
+        </div>
+
+        {/* Lista de informes */}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 32, color: "#888" }}>Cargando informes...</div>
+        ) : filtrados.length === 0 ? (
+          <div style={S.emptyState}>
+            <div style={{ fontSize: 40 }}>📭</div>
+            <p>No hay informes todavía.</p>
+            {DEMO_MODE && <p style={{ fontSize: 12, color: "#aaa" }}>Completá un checklist como operario para ver el resultado aquí.</p>}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filtrados.map(inf => (
+              <div key={inf.id} style={S.informeCard} onClick={() => setSelected(inf)}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: "#1a1a2e", fontSize: 15 }}>👷 {inf.operario_nombre}</div>
+                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                      {formatFecha(inf.fecha)} · {formatHora(inf.fecha)}
+                    </div>
+                  </div>
+                  <div style={{
+                    ...S.badge,
+                    background: inf.total_no_realizados === 0 ? "#e8f5e9" : "#ffebee",
+                    color: inf.total_no_realizados === 0 ? "#2e7d32" : "#c62828",
+                    fontSize: 12,
+                  }}>
+                    {inf.total_no_realizados === 0 ? "✓ Completo" : `⚠️ ${inf.total_no_realizados} pendiente${inf.total_no_realizados > 1 ? "s" : ""}`}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+                  <span style={{ fontSize: 12, color: "#555" }}>✅ {inf.total_realizados} realizadas</span>
+                  <span style={{ fontSize: 12, color: "#555" }}>❌ {inf.total_no_realizados} no realizadas</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// DETALLE DE INFORME
+// ─────────────────────────────────────────────
+function InformeDetalle({ informe, onBack }) {
+  const todoOk = informe.total_no_realizados === 0;
+  return (
+    <div style={S.bg}>
+      <div style={{ ...S.card, maxWidth: 440 }}>
+        <button style={S.btnBack} onClick={onBack}>← Volver</button>
+        <div style={{ textAlign: "center", margin: "16px 0" }}>
+          <div style={{ fontSize: 40 }}>{todoOk ? "🎉" : "⚠️"}</div>
+          <h2 style={S.titulo}>{todoOk ? "Turno completo" : "Con observaciones"}</h2>
+        </div>
+        <div style={S.infoRow}><span>👷 Operario</span><strong>{informe.operario_nombre}</strong></div>
+        <div style={S.infoRow}><span>📅 Fecha</span><strong>{formatFecha(informe.fecha)}</strong></div>
+        <div style={S.infoRow}><span>🕐 Inicio</span><strong>{informe.hora_inicio}</strong></div>
+        <div style={S.infoRow}><span>🕑 Fin</span><strong>{informe.hora_fin}</strong></div>
+        <div style={S.infoRow}><span>✅ Realizadas</span><strong style={{ color: "#2e7d32" }}>{informe.total_realizados}</strong></div>
+        <div style={S.infoRow}><span>❌ No realizadas</span><strong style={{ color: informe.total_no_realizados > 0 ? "#c62828" : "#555" }}>{informe.total_no_realizados}</strong></div>
+
+        <div style={{ marginTop: 20 }}>
+          <div style={S.label}>Detalle por tarea</div>
+          {informe.items.map(item => (
+            <div key={item.id} style={S.detalleRow}>
+              <span style={{ fontSize: 20 }}>{item.icono}</span>
+              <span style={{ flex: 1, fontSize: 14 }}>{item.tarea}</span>
+              <span style={{
+                ...S.badge,
+                background: item.status === "hecho" ? "#e8f5e9" : "#ffebee",
+                color: item.status === "hecho" ? "#2e7d32" : "#c62828",
+              }}>
+                {item.status === "hecho" ? "✓ Hecho" : "✗ Pendiente"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// ESTILOS
+// ─────────────────────────────────────────────
+const S = {
+  bg: {
+    minHeight: "100vh",
+    background: "linear-gradient(160deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%)",
+    display: "flex", alignItems: "flex-start", justifyContent: "center",
+    padding: "20px 16px", fontFamily: "'Segoe UI', sans-serif",
+  },
+  card: {
+    background: "#ffffff", borderRadius: 24, padding: "28px 24px",
+    width: "100%", maxWidth: 420,
+    boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
+    marginTop: 16,
+  },
+  demoBanner: {
+    position: "fixed", top: 0, left: 0, right: 0,
+    background: "#fff3cd", color: "#856404", textAlign: "center",
+    padding: "8px 16px", fontSize: 13, zIndex: 100,
+  },
+  demoHint: {
+    background: "#f8f9ff", border: "1px solid #d0d8ff", borderRadius: 10,
+    padding: "10px 14px", fontSize: 12, color: "#444", marginBottom: 16, lineHeight: 1.7,
+  },
+  topBar: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  chip: { background: "#f0f4ff", borderRadius: 20, padding: "5px 14px", fontSize: 13, fontWeight: 600, color: "#333" },
+  titulo: { margin: 0, fontSize: 24, fontWeight: 800, color: "#1a1a2e", letterSpacing: -0.5 },
+  sub: { margin: "4px 0 0", color: "#777", fontSize: 13, textTransform: "capitalize" },
+  label: { display: "block", fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
+  input: {
+    width: "100%", padding: "12px 14px", borderRadius: 10, border: "2px solid #e8e8e8",
+    fontSize: 15, outline: "none", boxSizing: "border-box",
+  },
+  select: {
+    width: "100%", padding: "10px 14px", borderRadius: 10, border: "2px solid #e8e8e8",
+    fontSize: 14, outline: "none", background: "#fff", boxSizing: "border-box",
+  },
+  btnPrimary: {
+    width: "100%", padding: "14px", background: "linear-gradient(135deg, #0d1b2a, #415a77)",
+    color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700,
+    cursor: "pointer", letterSpacing: 0.3,
+  },
+  btnSecondary: {
+    width: "100%", padding: "12px", background: "#f5f5f5",
+    color: "#555", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600,
+    cursor: "pointer",
+  },
+  btnLogout: {
+    padding: "5px 14px", background: "#f5f5f5", border: "none",
+    borderRadius: 20, fontSize: 12, cursor: "pointer", color: "#666",
+  },
+  btnRefresh: {
+    padding: "5px 12px", background: "#e8f0ff", border: "none",
+    borderRadius: 20, fontSize: 16, cursor: "pointer", color: "#333",
+  },
+  btnBack: {
+    background: "none", border: "none", color: "#415a77", fontWeight: 700,
+    fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 8,
+  },
+  errorMsg: { background: "#ffebee", color: "#c62828", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginTop: 8 },
+  progressBg: { background: "#eee", borderRadius: 99, height: 6, margin: "14px 0 12px", overflow: "hidden" },
+  progressFill: { height: "100%", background: "linear-gradient(90deg, #0d1b2a, #415a77)", borderRadius: 99, transition: "width 0.4s" },
+  miniRow: { display: "flex", gap: 8, justifyContent: "center", marginBottom: 20 },
+  miniDot: { width: 14, height: 14, borderRadius: "50%", transition: "all 0.2s" },
+  tareaBox: {
+    background: "#f8faff", borderRadius: 16, padding: "24px 20px",
+    textAlign: "center", marginBottom: 20, border: "2px solid #e8eeff",
+  },
+  tareaZona: { fontSize: 10, fontWeight: 800, color: "#999", textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 },
+  tareaTitulo: { fontSize: 22, fontWeight: 800, color: "#1a1a2e", marginBottom: 8 },
+  tareaDesc: { fontSize: 13, color: "#666", lineHeight: 1.6, margin: 0 },
+  botonesRow: { display: "flex", gap: 10 },
+  btnNo: { flex: 1, padding: "14px", background: "#ffebee", color: "#c62828", border: "2px solid #ffcdd2", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer" },
+  btnSi: { flex: 1, padding: "14px", background: "#e8f5e9", color: "#2e7d32", border: "2px solid #c8e6c9", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer" },
+  infoBox: { background: "#f8faff", borderRadius: 14, padding: "16px", border: "1px solid #e8eeff" },
+  infoBoxTitle: { fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
+  previewItem: { display: "flex", gap: 10, alignItems: "center", padding: "6px 0", fontSize: 14, color: "#333", borderBottom: "1px solid #eef" },
+  resumenRow: { display: "flex", gap: 10, marginBottom: 16 },
+  resumenBox: { flex: 1, borderRadius: 12, padding: "12px 8px", textAlign: "center" },
+  resumenNum: { fontSize: 28, fontWeight: 800, color: "#1a1a2e" },
+  resumenLabel: { fontSize: 11, color: "#555", fontWeight: 600, marginTop: 2 },
+  detalleSec: { marginBottom: 16 },
+  detalleRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #f5f5f5" },
+  badge: { fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 6 },
+  statsRow: { display: "flex", gap: 8, margin: "16px 0" },
+  statBox: { flex: 1, background: "#f8faff", borderRadius: 12, padding: "12px 8px", textAlign: "center", border: "1px solid #e8eeff" },
+  statNum: { fontSize: 22, fontWeight: 800, color: "#1a1a2e" },
+  statLabel: { fontSize: 10, color: "#888", fontWeight: 600, marginTop: 2, textTransform: "uppercase" },
+  informeCard: {
+    background: "#f8faff", borderRadius: 14, padding: "14px 16px",
+    border: "1px solid #e8eeff", cursor: "pointer",
+    transition: "transform 0.1s, box-shadow 0.1s",
+  },
+  infoRow: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f0f0f0", fontSize: 14, color: "#666" },
+  emptyState: { textAlign: "center", padding: "32px 16px", color: "#aaa" },
+};
