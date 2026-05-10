@@ -363,17 +363,38 @@ function previewFoto(input) {
   reader.readAsDataURL(input.files[0]);
 }
 
+async function subirFoto(file, itemId) {
+  try {
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `${usuario.nombre.replace(/ /g,'_')}/${Date.now()}_item${itemId}.${ext}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Content-Type': file.type
+      },
+      body: file
+    });
+    if (res.ok) return `${SUPABASE_URL}/storage/v1/object/public/fotos/${path}`;
+  } catch(e) {}
+  return null;
+}
+
 async function responder(conforme) {
   const obs = document.getElementById('obs-input')?.value || '';
-  const fotoEl = document.getElementById('foto-preview');
-  const foto = (fotoEl && fotoEl.style.display !== 'none') ? fotoEl.src : null;
+  const fotoInput = document.getElementById('foto-input');
+  let fotoUrl = null;
+  if (fotoInput && fotoInput.files && fotoInput.files[0]) {
+    fotoUrl = await subirFoto(fotoInput.files[0], ITEMS[itemActual].id);
+  }
 
   respuestas.push({
     id: ITEMS[itemActual].id,
     titulo: ITEMS[itemActual].titulo,
     conforme,
     observacion: obs,
-    foto: foto ? '[foto adjunta]' : null
+    foto: fotoUrl
   });
 
   itemActual++;
@@ -507,6 +528,7 @@ async function cargarAdmin() {
     items.forEach(it => {
       html += `<span class="badge ${it.conforme ? 'badge-ok' : 'badge-no'}">${it.conforme ? '✅' : '❌'} ${it.titulo}</span>`;
       if (it.observacion) html += `<div class="obs-texto" style="width:100%">📝 ${it.titulo}: ${it.observacion}</div>`;
+      if (it.foto) html += `<div style="width:100%; margin-top:4px;"><img src="${it.foto}" style="width:100%; border-radius:8px; max-height:200px; object-fit:cover;" /></div>`;
     });
     html += `</div></div>`;
   });
@@ -569,8 +591,8 @@ document.addEventListener('keydown', e => {
 cargarUsuariosDropdown();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.2 – 10/05/2025 17:45
+  v1.3 – 10/05/2026 18:30
 </div>
 
 </body>
-</html
+</html>
