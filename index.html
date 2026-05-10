@@ -912,6 +912,8 @@ async function editarItem(id) {
 // Cargar usuarios en el dropdown
 async function cargarUsuariosDropdown() {
   const sel = document.getElementById('login-usuario');
+  // Limpiar opciones existentes excepto la primera
+  while (sel.options.length > 1) sel.remove(1);
   try {
     const data = await sbFetch('usuarios?order=nombre.asc');
     if (data && data.length > 0) {
@@ -925,7 +927,7 @@ async function cargarUsuariosDropdown() {
     }
   } catch(e) {}
   // Fallback demo
-  ['Admin','Juan Pérez','María García','Cristian Fierro','Juan Pablo Romero','Gaston Gallinger','Ezequiel Seija'].forEach(n => {
+  ['Admin','Cristian Fierro','Juan Pablo Romero','Gaston Gallinger','Ezequiel Seija'].forEach(n => {
     const opt = document.createElement('option');
     opt.value = n; opt.textContent = n;
     sel.appendChild(opt);
@@ -942,7 +944,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.8 – 10/05/2026 21:00
+  v1.9 – 10/05/2026 21:15
 </div>
 
 </body>
