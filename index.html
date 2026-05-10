@@ -659,17 +659,21 @@ async function cargarAdminUsuarios() {
     if (data) usuarios = data;
   } catch(e) {}
 
-  const listaHTML = usuarios.map(u => `
-    <div class="informe-card" style="margin-bottom:8px;">
+  // Guardar IDs en dataset para evitar problemas con UUIDs
+  const listaHTML = usuarios.map(u => {
+    const safeId = u.id;
+    const safeName = u.nombre.replace(/'/g, "&#39;");
+    return `
+    <div class="informe-card" style="margin-bottom:8px;" data-uid="${safeId}">
       <div style="display:flex; align-items:center; gap:8px;">
         <div style="flex:1;">
           <div style="font-weight:600; font-size:0.88rem;">${u.nombre}</div>
           <div style="font-size:0.75rem; color:#888;">${u.role === 'admin' ? '👑 Admin' : '👷 Operario'}</div>
         </div>
-        <button onclick="cambiarClave(${JSON.stringify(u.id)}, '${u.nombre.replace(/'/g, "\\'")}')" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.78rem;">🔑 Clave</button>
-        <button onclick="eliminarUsuario(${JSON.stringify(u.id)}, '${u.nombre.replace(/'/g, "\\'")}')" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.78rem;">🗑</button>
+        <button onclick="cambiarClave('${safeId}', '${safeName}')" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.78rem;">🔑 Clave</button>
+        <button onclick="eliminarUsuario('${safeId}', '${safeName}')" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.78rem;">🗑</button>
       </div>
-    </div>`).join('');
+    </div>`}).join('');
 
   cont.innerHTML = `
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
@@ -737,15 +741,16 @@ async function eliminarUsuario(id, nombre) {
 
 async function cargarAdminChecklist() {
   const cont = document.getElementById('admin-checklist');
+  cont.innerHTML = '<p style="color:#888; font-size:0.85rem; padding:12px;">Cargando...</p>';
 
   let sectores = [];
   let items = [];
   try {
     const ds = await sbFetch('sectores?order=orden.asc');
     const di = await sbFetch('checklist_items?order=orden.asc');
-    if (ds) sectores = ds;
-    if (di) items = di;
-  } catch(e) {}
+    if (ds && ds.length) sectores = ds;
+    if (di && di.length) items = di;
+  } catch(e) { console.error('Error cargando checklist admin:', e); }
 
   // Lista de ítems por sector
   const listaHTML = sectores.length === 0
@@ -954,7 +959,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.1 – 10/05/2026 21:45
+  v2.2 – 10/05/2026 22:00
 </div>
 
 </body>
