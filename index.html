@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -252,23 +250,29 @@ async function sbFetch(path, method = 'GET', body = null) {
 }
 
 // ===== CHECKLIST ITEMS =====
-let ITEMS = [
-  { id: 1, titulo: "Puertas cerradas – Depósito de Harinas", descripcion: "Verificar que todas las puertas del depósito de harinas estén correctamente cerradas y aseguradas." },
-  { id: 2, titulo: "Piso listo – Depósito de Harinas", descripcion: "Confirmar que el piso del depósito de harinas esté limpio y libre de residuos." },
-  { id: 3, titulo: "Cortina depósito harinas limpia", descripcion: "Revisar que la cortina del depósito de harinas esté limpia y en buen estado." },
-];
+let ITEMS = [];
+let SECTORES = [];
 
 async function cargarItems() {
   try {
-    const data = await sbFetch('checklist_items?activo=eq.true&order=orden.asc');
-    if (data && data.length > 0) ITEMS = data;
+    const sectores = await sbFetch('sectores?activo=eq.true&order=orden.asc');
+    const items = await sbFetch('checklist_items?activo=eq.true&order=orden.asc');
+    if (sectores && sectores.length > 0) SECTORES = sectores;
+    if (items && items.length > 0) ITEMS = items;
   } catch(e) {}
+  // Fallback
+  if (!SECTORES.length) SECTORES = [{ id: 1, nombre: 'Depósito de Harinas', orden: 1 }];
+  if (!ITEMS.length) ITEMS = [
+    { id: 1, titulo: "Puertas cerradas – Depósito de Harinas", descripcion: "", sector_id: 1 },
+    { id: 2, titulo: "Piso listo – Depósito de Harinas", descripcion: "", sector_id: 1 },
+    { id: 3, titulo: "Cortina depósito harinas limpia", descripcion: "", sector_id: 1 },
+  ];
 }
 
 // ===== ESTADO =====
 let usuario = null;
 let respuestas = [];
-let itemActual = 0;
+let sectorActual = 0;
 let horaInicio = null;
 let firmaDataURL = null;
 let firmaCtx = null;
@@ -287,7 +291,6 @@ async function iniciarSesion() {
   const password_input = document.getElementById('login-password').value.trim();
   if (!usuario_input || !password_input) return;
 
-  // Modo demo si Supabase falla
   const demos = [
     { nombre: 'Admin', password: 'admin123', role: 'admin' },
     { nombre: 'Juan Pérez', password: '1234', role: 'operario' },
@@ -300,9 +303,7 @@ async function iniciarSesion() {
     if (data && data.length > 0) found = data[0];
   } catch(e) {}
 
-  if (!found) {
-    found = demos.find(u => u.nombre === usuario_input && u.password === password_input);
-  }
+  if (!found) found = demos.find(u => u.nombre === usuario_input && u.password === password_input);
 
   if (!found) {
     document.getElementById('login-error').style.display = 'block';
@@ -322,94 +323,118 @@ async function iniciarSesion() {
 }
 
 function cerrarSesion() {
-  usuario = null; respuestas = []; itemActual = 0; firmaDataURL = null;
+  usuario = null; respuestas = []; sectorActual = 0; firmaDataURL = null;
   document.getElementById('login-usuario').value = '';
   document.getElementById('login-password').value = '';
   mostrar('login');
 }
 
-// ===== CHECKLIST =====
+// ===== CHECKLIST POR SECTORES =====
 function iniciarChecklist() {
   respuestas = [];
-  itemActual = 0;
+  sectorActual = 0;
   horaInicio = new Date().toLocaleTimeString('es-AR');
   mostrar('checklist');
-  renderItem();
+  renderSector();
 }
 
-function renderItem() {
-  const item = ITEMS[itemActual];
-  const pct = Math.round((itemActual / ITEMS.length) * 100);
+function renderSector() {
+  const sector = SECTORES[sectorActual];
+  const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
+  const pct = Math.round((sectorActual / SECTORES.length) * 100);
+
   document.getElementById('progreso-fill').style.width = pct + '%';
-  document.getElementById('progreso-texto').textContent = `${itemActual} / ${ITEMS.length} completados`;
+  document.getElementById('progreso-texto').textContent = `Sector ${sectorActual + 1} / ${SECTORES.length}`;
+
+  let itemsHTML = itemsDelSector.map((it, idx) => `
+    <div style="border-bottom: ${idx < itemsDelSector.length-1 ? '1px solid #f0f0f0' : 'none'}; padding: 12px 0;">
+      <div style="font-weight:600; font-size:0.9rem; margin-bottom:8px;">${it.titulo}</div>
+      ${it.descripcion ? `<div style="font-size:0.78rem; color:#888; margin-bottom:8px; background:#fff8f0; padding:6px 8px; border-radius:6px; border-left:3px solid #e65c00;">💡 ${it.descripcion}</div>` : ''}
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+        <button id="btn-ok-${it.id}" class="btn btn-conforme" style="padding:10px; opacity:0.45; font-size:0.85rem;" onclick="seleccionarEstadoItem(${it.id}, true)">✅ Conforme</button>
+        <button id="btn-no-${it.id}" class="btn btn-noconforme" style="padding:10px; opacity:0.45; font-size:0.85rem;" onclick="seleccionarEstadoItem(${it.id}, false)">❌ No conforme</button>
+      </div>
+      <label class="foto-label" for="foto-${it.id}" style="margin-bottom:6px;">📷 Foto (opcional)</label>
+      <input type="file" id="foto-${it.id}" accept="image/*" capture="environment" style="display:none" onchange="previewFotoItem(this, ${it.id})" />
+      <img id="preview-${it.id}" style="width:100%; border-radius:8px; margin-bottom:6px; display:none;" />
+      <textarea id="obs-${it.id}" placeholder="Observaciones (opcional)..." style="min-height:50px;"></textarea>
+    </div>
+  `).join('');
 
   document.getElementById('checklist-contenido').innerHTML = `
     <div class="card">
-      <div class="item-header">
-        <div class="item-numero">${item.id}</div>
-        <h3>${item.titulo}</h3>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        <div style="background:#e65c00; color:white; border-radius:50%; width:36px; height:36px; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">${sectorActual+1}</div>
+        <h2 style="margin:0;">📍 ${sector.nombre}</h2>
       </div>
-      <div class="item-descripcion">💡 ${item.descripcion}</div>
-      <div class="btns-row">
-        <button id="btn-conforme" class="btn btn-conforme" style="opacity:0.5;" onclick="seleccionarEstado(true)">✅ Conforme</button>
-        <button id="btn-noconforme" class="btn btn-noconforme" style="opacity:0.5;" onclick="seleccionarEstado(false)">❌ No conforme</button>
-      </div>
-      <label class="foto-label" for="foto-input">📷 Agregar foto (opcional)</label>
-      <input type="file" id="foto-input" accept="image/*" capture="environment" style="display:none" onchange="previewFoto(this)" />
-      <img id="foto-preview" class="foto-preview" />
-      <textarea id="obs-input" placeholder="Observaciones (opcional)..."></textarea>
-      <button id="btn-continuar" class="btn btn-primary btn-disabled" onclick="confirmarItem()">Continuar →</button>
-    </div>
-  `;
+      ${itemsHTML}
+      <button id="btn-continuar-sector" class="btn btn-primary btn-disabled" style="margin-top:16px;" onclick="confirmarSector()">
+        ${sectorActual < SECTORES.length - 1 ? 'Siguiente sector →' : 'Finalizar ✅'}
+      </button>
+    </div>`;
+
+  // Estado de cada ítem
+  window._estadosSector = {};
+  itemsDelSector.forEach(it => { window._estadosSector[it.id] = null; });
 }
 
-let estadoActual = null;
-
-function seleccionarEstado(conforme) {
-  estadoActual = conforme;
-  const btnOk = document.getElementById('btn-conforme');
-  const btnNo = document.getElementById('btn-noconforme');
-  const btnCont = document.getElementById('btn-continuar');
-
+function seleccionarEstadoItem(itemId, conforme) {
+  window._estadosSector[itemId] = conforme;
+  const btnOk = document.getElementById(`btn-ok-${itemId}`);
+  const btnNo = document.getElementById(`btn-no-${itemId}`);
   if (conforme) {
-    btnOk.style.opacity = '1';
-    btnOk.style.transform = 'scale(1.05)';
-    btnNo.style.opacity = '0.4';
-    btnNo.style.transform = 'scale(1)';
+    btnOk.style.opacity = '1'; btnOk.style.transform = 'scale(1.03)';
+    btnNo.style.opacity = '0.4'; btnNo.style.transform = 'scale(1)';
   } else {
-    btnNo.style.opacity = '1';
-    btnNo.style.transform = 'scale(1.05)';
-    btnOk.style.opacity = '0.4';
-    btnOk.style.transform = 'scale(1)';
+    btnNo.style.opacity = '1'; btnNo.style.transform = 'scale(1.03)';
+    btnOk.style.opacity = '0.4'; btnOk.style.transform = 'scale(1)';
   }
-
-  btnCont.classList.remove('btn-disabled');
+  // Habilitar continuar si todos marcados
+  const sector = SECTORES[sectorActual];
+  const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
+  const todosMarcados = itemsDelSector.every(it => window._estadosSector[it.id] !== null);
+  const btnCont = document.getElementById('btn-continuar-sector');
+  if (todosMarcados) btnCont.classList.remove('btn-disabled');
 }
 
-async function confirmarItem() {
-  if (estadoActual === null) return;
-  const obs = document.getElementById('obs-input')?.value || '';
-  const fotoInput = document.getElementById('foto-input');
-  let fotoUrl = null;
-  if (fotoInput && fotoInput.files && fotoInput.files[0]) {
-    fotoUrl = await subirFoto(fotoInput.files[0], ITEMS[itemActual].id);
+function previewFotoItem(input, itemId) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById(`preview-${itemId}`);
+    img.src = e.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+async function confirmarSector() {
+  const sector = SECTORES[sectorActual];
+  const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
+
+  for (const it of itemsDelSector) {
+    const obs = document.getElementById(`obs-${it.id}`)?.value || '';
+    const fotoInput = document.getElementById(`foto-${it.id}`);
+    let fotoUrl = null;
+    if (fotoInput && fotoInput.files && fotoInput.files[0]) {
+      fotoUrl = await subirFoto(fotoInput.files[0], it.id);
+    }
+    respuestas.push({
+      id: it.id,
+      titulo: it.titulo,
+      sector: sector.nombre,
+      conforme: window._estadosSector[it.id],
+      observacion: obs,
+      foto: fotoUrl
+    });
   }
 
-  respuestas.push({
-    id: ITEMS[itemActual].id,
-    titulo: ITEMS[itemActual].titulo,
-    conforme: estadoActual,
-    observacion: obs,
-    foto: fotoUrl
-  });
-
-  estadoActual = null;
-  itemActual++;
-  if (itemActual < ITEMS.length) {
-    renderItem();
+  sectorActual++;
+  if (sectorActual < SECTORES.length) {
+    renderSector();
   } else {
     document.getElementById('progreso-fill').style.width = '100%';
-    document.getElementById('progreso-texto').textContent = `${ITEMS.length} / ${ITEMS.length} completados`;
+    document.getElementById('progreso-texto').textContent = `${SECTORES.length} / ${SECTORES.length} sectores completados`;
     iniciarFirma();
   }
 }
@@ -419,8 +444,7 @@ function previewFoto(input) {
   const reader = new FileReader();
   reader.onload = e => {
     const img = document.getElementById('foto-preview');
-    img.src = e.target.result;
-    img.style.display = 'block';
+    if (img) { img.src = e.target.result; img.style.display = 'block'; }
   };
   reader.readAsDataURL(input.files[0]);
 }
@@ -554,7 +578,7 @@ async function finalizarInforme() {
   localStorage.setItem('informes', JSON.stringify(guardados));
 
   alert('✅ Informe guardado correctamente. ¡Buen trabajo!');
-  respuestas = []; itemActual = 0; firmaDataURL = null;
+  respuestas = []; sectorActual = 0; firmaDataURL = null;
   document.getElementById('nombre-operario').textContent = usuario.nombre;
   mostrar('menu');
 }
@@ -626,60 +650,142 @@ function verTab(tab) {
 
 async function cargarAdminChecklist() {
   const cont = document.getElementById('admin-checklist');
-  cont.innerHTML = '<p style="color:#888; font-size:0.85rem; margin-bottom:12px;">Cargando ítems...</p>';
-  
+
+  let sectores = [];
   let items = [];
   try {
-    const data = await sbFetch('checklist_items?order=orden.asc');
-    if (data) items = data;
+    const ds = await sbFetch('sectores?order=orden.asc');
+    const di = await sbFetch('checklist_items?order=orden.asc');
+    if (ds) sectores = ds;
+    if (di) items = di;
   } catch(e) {}
 
-  let html = `
-    <div class="card">
-      <h2>⚙️ Ítems del Checklist</h2>
-      <div id="items-lista">`;
-  
-  if (!items.length) {
-    html += `<div class="empty-state"><div class="icon">📝</div><p>No hay ítems todavía.</p></div>`;
-  } else {
-    items.forEach(it => {
-      html += `
-        <div class="informe-card" id="item-${it.id}" style="border-left-color:${it.activo ? '#e65c00' : '#ccc'}">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-            <div style="flex:1;">
-              <div style="font-weight:600; font-size:0.9rem;">${it.titulo}</div>
-              <div style="font-size:0.78rem; color:#888; margin-top:2px;">${it.descripcion || ''}</div>
+  // Lista de ítems por sector
+  const listaHTML = sectores.length === 0
+    ? `<div class="empty-state"><div class="icon">📍</div><p>No hay sectores todavía.</p></div>`
+    : sectores.map((sec, sidx) => {
+        const its = items.filter(i => i.sector_id === sec.id);
+        return `
+          <div style="margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <div style="background:#e65c00; color:white; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:700;">📍 ${sec.nombre}</div>
+              <button onclick="eliminarSector(${sec.id})" style="padding:2px 7px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
             </div>
-            <div style="display:flex; gap:6px; flex-shrink:0;">
-              <button onclick="editarItem(${it.id})" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.8rem;">✏️</button>
-              <button onclick="eliminarItem(${it.id})" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.8rem;">🗑</button>
-            </div>
-          </div>
-        </div>`;
-    });
-  }
+            ${its.length === 0
+              ? `<div style="font-size:0.8rem; color:#aaa; padding-left:8px;">Sin ítems</div>`
+              : its.map((it, idx) => `
+                <div class="informe-card" style="margin-bottom:6px; padding:10px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                      <button onclick="moverItem(${it.id}, 'arriba')" style="padding:1px 5px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.75rem; ${idx===0?'opacity:0.3':''}" ${idx===0?'disabled':''}>▲</button>
+                      <button onclick="moverItem(${it.id}, 'abajo')" style="padding:1px 5px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.75rem; ${idx===its.length-1?'opacity:0.3':''}" ${idx===its.length-1?'disabled':''}>▼</button>
+                    </div>
+                    <div style="flex:1; font-size:0.82rem; font-weight:600;">${idx+1}. ${it.titulo}</div>
+                    <div style="display:flex; gap:4px;">
+                      <button onclick="editarItem(${it.id})" style="padding:3px 6px; border:none; border-radius:5px; background:#fff3e0; color:#e65c00; cursor:pointer;">✏️</button>
+                      <button onclick="eliminarItem(${it.id})" style="padding:3px 6px; border:none; border-radius:5px; background:#ffebee; color:#c62828; cursor:pointer;">🗑</button>
+                    </div>
+                  </div>
+                </div>`).join('')}
+          </div>`;
+      }).join('');
 
-  html += `</div>
-      <div style="margin-top:16px; border-top:1px solid #f0f0f0; padding-top:16px;">
-        <h2 style="margin-bottom:12px;">➕ Agregar ítem</h2>
-        <input type="text" id="nuevo-titulo" placeholder="Nombre del ítem (ej: Máquina 3 limpia)" />
-        <textarea id="nuevo-descripcion" placeholder="Descripción / instrucción para el operario (opcional)"></textarea>
-        <button class="btn btn-primary" onclick="agregarItem()">Agregar ítem</button>
+  cont.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
+      <!-- IZQUIERDA -->
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card" style="margin-bottom:0;">
+          <h2 style="margin-bottom:12px;">📍 Nuevo sector</h2>
+          <input type="text" id="nuevo-sector" placeholder="Ej: Sector Producción" />
+          <button class="btn btn-primary" onclick="agregarSector()">Agregar sector</button>
+        </div>
+        <div class="card" style="margin-bottom:0;">
+          <h2 style="margin-bottom:12px;">➕ Nuevo ítem</h2>
+          <select id="nuevo-item-sector" style="margin-bottom:12px;">
+            <option value="">Seleccioná el sector...</option>
+            ${sectores.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}
+          </select>
+          <input type="text" id="nuevo-titulo" placeholder="Nombre del ítem" />
+          <textarea id="nuevo-descripcion" placeholder="Instrucción (opcional)..." style="min-height:60px;"></textarea>
+          <button class="btn btn-primary" onclick="agregarItem()">Agregar ítem</button>
+        </div>
+      </div>
+      <!-- DERECHA -->
+      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:70vh;">
+        <h2 style="margin-bottom:12px;">📋 Checklist actual</h2>
+        <div id="items-lista">${listaHTML}</div>
       </div>
     </div>`;
-  
-  cont.innerHTML = html;
+}
+
+async function agregarSector() {
+  const nombre = document.getElementById('nuevo-sector').value.trim();
+  if (!nombre) { alert('Escribí el nombre del sector'); return; }
+  try {
+    const data = await sbFetch('sectores?order=orden.desc&limit=1');
+    const orden = data && data.length > 0 ? data[0].orden + 1 : 1;
+    await sbFetch('sectores', 'POST', { nombre, orden, activo: true });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al agregar sector.'); }
+}
+
+async function eliminarSector(id) {
+  if (!confirm('¿Eliminás este sector y todos sus ítems?')) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?sector_id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    await fetch(`${SUPABASE_URL}/rest/v1/sectores?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al eliminar sector.'); }
+}
+}
+
+async function moverItem(id, direccion) {
+  try {
+    const data = await sbFetch('checklist_items?order=orden.asc');
+    if (!data) return;
+    const idx = data.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    const swapIdx = direccion === 'arriba' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= data.length) return;
+
+    const ordenA = data[idx].orden;
+    const ordenB = data[swapIdx].orden;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?id=eq.${data[idx].id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orden: ordenB })
+    });
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?id=eq.${data[swapIdx].id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orden: ordenA })
+    });
+
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al reordenar.'); }
 }
 
 async function agregarItem() {
   const titulo = document.getElementById('nuevo-titulo').value.trim();
   const descripcion = document.getElementById('nuevo-descripcion').value.trim();
+  const sectorId = parseInt(document.getElementById('nuevo-item-sector')?.value);
   if (!titulo) { alert('Escribí el nombre del ítem'); return; }
+  if (!sectorId) { alert('Seleccioná un sector'); return; }
 
   try {
-    const items = await sbFetch('checklist_items?order=orden.desc&limit=1');
+    const items = await sbFetch(`checklist_items?sector_id=eq.${sectorId}&order=orden.desc&limit=1`);
     const orden = items && items.length > 0 ? (items[0].orden + 1) : 1;
-    await sbFetch('checklist_items', 'POST', { titulo, descripcion, orden, activo: true });
+    await sbFetch('checklist_items', 'POST', { titulo, descripcion, orden, activo: true, sector_id: sectorId });
     await cargarItems();
     await cargarAdminChecklist();
   } catch(e) { alert('Error al agregar. Revisá la conexión.'); }
@@ -749,7 +855,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v1.5 – 10/05/2026 19:40
+  v1.7 – 10/05/2026 20:30
 </div>
 
 </body>
