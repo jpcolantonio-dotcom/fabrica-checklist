@@ -1,1 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Planeta Empanada – Checklist</title>
+  <meta name="theme-color" content="#e65c00" />
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; min-height: 100vh; }
+
+    /* HEADER */
+    .header {
+      background: linear-gradient(135deg, #e65c00, #f9a825);
+      color: white;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .header .logo { font-size: 2rem; }
+    .header h1 { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+    .header p { font-size: 0.75rem; opacity: 0.9; }
+
+    /* PANTALLAS */
+    .screen { display: none; padding: 20px; max-width: 500px; margin: 0 auto; }
+    .screen.active { display: block; }
+
+    /* CARD */
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .card h2 { font-size: 1.1rem; color: #e65c00; margin-bottom: 12px; }
+
+    /* INPUTS */
+    input[type="text"], input[type="password"], textarea, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 1rem;
+      margin-bottom: 12px;
+      transition: border 0.2s;
+    }
+    input:focus, textarea:focus { border-color: #e65c00; outline: none; }
+    textarea { resize: vertical; min-height: 70px; }
+
+    /* BOTONES */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: linear-gradient(135deg, #e65c00, #f9a825); color: white; }
+    .btn-secondary { background: #eee; color: #333; margin-top: 8px; }
+    .btn-conforme { background: #4caf50; color: white; }
+    .btn-noconforme { background: #f44336; color: white; }
+    .btn-disabled { opacity: 0.4; pointer-events: none; }
+
+    /* LOGIN */
+    .login-icon { text-align: center; font-size: 3rem; margin-bottom: 8px; }
+    .error-msg { color: #f44336; font-size: 0.85rem; text-align: center; margin-top: -8px; margin-bottom: 8px; }
+
+    /* CHECKLIST ITEM */
+    .item-numero {
+      background: #e65c00;
+      color: white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+    .item-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .item-header h3 { font-size: 1rem; font-weight: 600; }
+    .item-descripcion { font-size: 0.85rem; color: #666; margin-bottom: 16px; background: #fff8f0; padding: 10px; border-radius: 8px; border-left: 3px solid #e65c00; }
+    .btns-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .foto-label { display: block; text-align: center; padding: 10px; border: 2px dashed #ddd; border-radius: 8px; cursor: pointer; color: #888; font-size: 0.85rem; margin-bottom: 10px; }
+    .foto-label:hover { border-color: #e65c00; color: #e65c00; }
+    .foto-preview { width: 100%; border-radius: 8px; margin-bottom: 10px; display: none; }
+    .progreso-bar { height: 6px; background: #eee; border-radius: 3px; margin-bottom: 4px; }
+    .progreso-fill { height: 100%; background: linear-gradient(90deg, #e65c00, #f9a825); border-radius: 3px; transition: width 0.4s; }
+    .progreso-texto { font-size: 0.75rem; color: #888; text-align: right; margin-bottom: 16px; }
+
+    /* FIRMA */
+    canvas { border: 2px solid #ddd; border-radius: 8px; width: 100%; cursor: crosshair; touch-action: none; }
+    .firma-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .firma-btns button { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+    .btn-limpiar { background: #eee; color: #333; }
+    .btn-confirmar-firma { background: #4caf50; color: white; }
+
+    /* INFORME */
+    .informe-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+    .informe-item:last-child { border-bottom: none; }
+    .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+    .badge-ok { background: #e8f5e9; color: #2e7d32; }
+    .badge-no { background: #ffebee; color: #c62828; }
+    .resumen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .resumen-box { background: #f9f9f9; border-radius: 8px; padding: 12px; text-align: center; }
+    .resumen-box .num { font-size: 2rem; font-weight: 700; }
+    .resumen-box .lbl { font-size: 0.75rem; color: #888; }
+    .num-ok { color: #4caf50; }
+    .num-no { color: #f44336; }
+
+    /* ADMIN */
+    .informe-card { background: white; border-radius: 10px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border-left: 4px solid #e65c00; }
+    .informe-card h3 { font-size: 0.95rem; margin-bottom: 4px; }
+    .informe-card .meta { font-size: 0.78rem; color: #888; margin-bottom: 8px; }
+    .mini-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .firma-img { width: 100%; border-radius: 8px; border: 1px solid #eee; margin-top: 8px; }
+    .obs-texto { font-size: 0.82rem; color: #555; font-style: italic; margin-top: 4px; }
+
+    .tag-admin { background: #fff3e0; color: #e65c00; padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }
+
+    .nav-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .nav-tab { flex: 1; padding: 10px; border: 2px solid #e65c00; border-radius: 8px; background: white; color: #e65c00; font-weight: 700; cursor: pointer; font-size: 0.85rem; text-align: center; }
+    .nav-tab.activo { background: #e65c00; color: white; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: #aaa; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🫓</div>
+  <div>
+    <h1>Planeta Empanada</h1>
+    <p>Checklist de Cierre</p>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="screen-login" class="screen active">
+  <div class="card" style="margin-top:24px;">
+    <div class="login-icon">🔐</div>
+    <h2 style="text-align:center; margin-bottom:16px;">Iniciar Sesión</h2>
+    <input type="text" id="login-usuario" placeholder="Usuario" />
+    <input type="password" id="login-password" placeholder="Contraseña" />
+    <div id="login-error" class="error-msg" style="display:none;">Usuario o contraseña incorrectos</div>
+    <button class="btn btn-primary" onclick="iniciarSesion()">Entrar</button>
+  </div>
+</div>
+
+<!-- MENU OPERARIO -->
+<div id="screen-menu" class="screen">
+  <div class="card" style="margin-top:20px;">
+    <h2>👋 Bienvenido, <span id="nombre-operario"></span></h2>
+    <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">¿Listo para el checklist de cierre?</p>
+    <button class="btn btn-primary" onclick="iniciarChecklist()">▶ Iniciar Checklist</button>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Cerrar sesión</button>
+  </div>
+</div>
+
+<!-- CHECKLIST -->
+<div id="screen-checklist" class="screen">
+  <div class="progreso-bar"><div class="progreso-fill" id="progreso-fill" style="width:0%"></div></div>
+  <div class="progreso-texto" id="progreso-texto">0 / 0</div>
+  <div id="checklist-contenido"></div>
+</div>
+
+<!-- FIRMA -->
+<div id="screen-firma" class="screen">
+  <div class="card" style="margin-top:16px;">
+    <h2>✍️ Firma del Operario</h2>
+    <p style="font-size:0.85rem; color:#666; margin-bottom:12px;">Firmá para confirmar que completaste el checklist.</p>
+    <canvas id="firma-canvas" width="400" height="180"></canvas>
+    <div class="firma-btns">
+      <button class="btn-limpiar" onclick="limpiarFirma()">🗑 Limpiar</button>
+      <button class="btn-confirmar-firma" onclick="confirmarFirma()">✅ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- INFORME FINAL -->
+<div id="screen-informe" class="screen">
+  <div class="card" style="margin-top:16px;">
+    <h2>📋 Informe de Cierre</h2>
+    <div id="informe-meta" style="font-size:0.82rem; color:#888; margin-bottom:12px;"></div>
+    <div class="resumen-grid">
+      <div class="resumen-box"><div class="num num-ok" id="total-ok">0</div><div class="lbl">Conformes</div></div>
+      <div class="resumen-box"><div class="num num-no" id="total-no">0</div><div class="lbl">No conformes</div></div>
+    </div>
+    <div id="informe-items"></div>
+    <div id="informe-firma-box" style="margin-top:12px; display:none;">
+      <p style="font-size:0.85rem; color:#666; margin-bottom:4px;">Firma:</p>
+      <img id="informe-firma-img" class="firma-img" />
+    </div>
+    <button class="btn btn-primary" style="margin-top:16px;" onclick="finalizarInforme()">✅ Finalizar y Guardar</button>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="screen-admin" class="screen">
+  <div style="margin-top:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2 style="color:#e65c00;">Panel Admin</h2>
+      <span class="tag-admin">ADMIN</span>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab activo" id="tab-informes" onclick="verTab('informes')">📋 Informes</div>
+      <div class="nav-tab" id="tab-operarios" onclick="verTab('operarios')">👷 Operarios</div>
+    </div>
+    <div id="admin-informes"></div>
+    <div id="admin-operarios" style="display:none;"></div>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="cerrarSesion()">Cerrar sesión</button>
+  </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN SUPABASE =====
+const SUPABASE_URL = "https://vabhfvveskphnekmbgom.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QG6stpom6q0ThTiKzQRkRQ_Xfll2ehc";
+
+async function sbFetch(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'return=representation' : ''
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
+  if (!res.ok) { console.error(await res.text()); return null; }
+  return res.json();
+}
+
+// ===== CHECKLIST ITEMS =====
+const ITEMS = [
+  { id: 1, titulo: "Puertas cerradas – Depósito de Harinas", descripcion: "Verificar que todas las puertas del depósito de harinas estén correctamente cerradas y aseguradas." },
+  { id: 2, titulo: "Piso listo – Depósito de Harinas", descripcion: "Confirmar que el piso del depósito de harinas esté limpio y libre de residuos." },
+  { id: 3, titulo: "Cortina depósito harinas limpia", descripcion: "Revisar que la cortina del depósito de harinas esté limpia y en buen estado." },
+];
+
+// ===== ESTADO =====
+let usuario = null;
+let respuestas = [];
+let itemActual = 0;
+let horaInicio = null;
+let firmaDataURL = null;
+let firmaCtx = null;
+let dibujando = false;
+
+// ===== NAVEGACIÓN =====
+function mostrar(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ===== LOGIN =====
+async function iniciarSesion() {
+  const usuario_input = document.getElementById('login-usuario').value.trim();
+  const password_input = document.getElementById('login-password').value.trim();
+  if (!usuario_input || !password_input) return;
+
+  // Modo demo si Supabase falla
+  const demos = [
+    { nombre: 'Admin', password: 'admin123', role: 'admin' },
+    { nombre: 'Juan Pérez', password: '1234', role: 'operario' },
+    { nombre: 'María García', password: '1234', role: 'operario' },
+  ];
+
+  let found = null;
+  try {
+    const data = await sbFetch(`usuarios?nombre=eq.${encodeURIComponent(usuario_input)}&password=eq.${encodeURIComponent(password_input)}`);
+    if (data && data.length > 0) found = data[0];
+  } catch(e) {}
+
+  if (!found) {
+    found = demos.find(u => u.nombre === usuario_input && u.password === password_input);
+  }
+
+  if (!found) {
+    document.getElementById('login-error').style.display = 'block';
+    return;
+  }
+
+  usuario = found;
+  document.getElementById('login-error').style.display = 'none';
+
+  if (usuario.role === 'admin') {
+    cargarAdmin();
+    mostrar('admin');
+  } else {
+    document.getElementById('nombre-operario').textContent = usuario.nombre;
+    mostrar('menu');
+  }
+}
+
+function cerrarSesion() {
+  usuario = null; respuestas = []; itemActual = 0; firmaDataURL = null;
+  document.getElementById('login-usuario').value = '';
+  document.getElementById('login-password').value = '';
+  mostrar('login');
+}
+
+// ===== CHECKLIST =====
+function iniciarChecklist() {
+  respuestas = [];
+  itemActual = 0;
+  horaInicio = new Date().toLocaleTimeString('es-AR');
+  mostrar('checklist');
+  renderItem();
+}
+
+function renderItem() {
+  const item = ITEMS[itemActual];
+  const pct = Math.round((itemActual / ITEMS.length) * 100);
+  document.getElementById('progreso-fill').style.width = pct + '%';
+  document.getElementById('progreso-texto').textContent = `${itemActual} / ${ITEMS.length} completados`;
+
+  document.getElementById('checklist-contenido').innerHTML = `
+    <div class="card">
+      <div class="item-header">
+        <div class="item-numero">${item.id}</div>
+        <h3>${item.titulo}</h3>
+      </div>
+      <div class="item-descripcion">💡 ${item.descripcion}</div>
+      <div class="btns-row">
+        <button class="btn btn-conforme" onclick="responder(true)">✅ Conforme</button>
+        <button class="btn btn-noconforme" onclick="responder(false)">❌ No conforme</button>
+      </div>
+      <label class="foto-label" for="foto-input">📷 Agregar foto (opcional)</label>
+      <input type="file" id="foto-input" accept="image/*" capture="environment" style="display:none" onchange="previewFoto(this)" />
+      <img id="foto-preview" class="foto-preview" />
+      <textarea id="obs-input" placeholder="Observaciones (opcional)..."></textarea>
+    </div>
+  `;
+}
+
+function previewFoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('foto-preview');
+    img.src = e.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+async function responder(conforme) {
+  const obs = document.getElementById('obs-input')?.value || '';
+  const fotoEl = document.getElementById('foto-preview');
+  const foto = (fotoEl && fotoEl.style.display !== 'none') ? fotoEl.src : null;
+
+  respuestas.push({
+    id: ITEMS[itemActual].id,
+    titulo: ITEMS[itemActual].titulo,
+    conforme,
+    observacion: obs,
+    foto: foto ? '[foto adjunta]' : null
+  });
+
+  itemActual++;
+  if (itemActual < ITEMS.length) {
+    renderItem();
+  } else {
+    document.getElementById('progreso-fill').style.width = '100%';
+    document.getElementById('progreso-texto').textContent = `${ITEMS.length} / ${ITEMS.length} completados`;
+    iniciarFirma();
+  }
+}
+
+// ===== FIRMA =====
+function iniciarFirma() {
+  mostrar('firma');
+  const canvas = document.getElementById('firma-canvas');
+  firmaCtx = canvas.getContext('2d');
+  firmaCtx.strokeStyle = '#222';
+  firmaCtx.lineWidth = 2.5;
+  firmaCtx.lineCap = 'round';
+
+  const getPos = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - r.left) * (canvas.width / r.width), y: (src.clientY - r.top) * (canvas.height / r.height) };
+  };
+
+  canvas.addEventListener('mousedown', e => { dibujando = true; const p = getPos(e); firmaCtx.beginPath(); firmaCtx.moveTo(p.x, p.y); });
+  canvas.addEventListener('mousemove', e => { if (!dibujando) return; const p = getPos(e); firmaCtx.lineTo(p.x, p.y); firmaCtx.stroke(); });
+  canvas.addEventListener('mouseup', () => dibujando = false);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); dibujando = true; const p = getPos(e); firmaCtx.beginPath(); firmaCtx.moveTo(p.x, p.y); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!dibujando) return; const p = getPos(e); firmaCtx.lineTo(p.x, p.y); firmaCtx.stroke(); }, { passive: false });
+  canvas.addEventListener('touchend', () => dibujando = false);
+}
+
+function limpiarFirma() {
+  const canvas = document.getElementById('firma-canvas');
+  firmaCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function confirmarFirma() {
+  firmaDataURL = document.getElementById('firma-canvas').toDataURL();
+  mostrarInforme();
+}
+
+// ===== INFORME =====
+function mostrarInforme() {
+  mostrar('informe');
+  const ok = respuestas.filter(r => r.conforme).length;
+  const no = respuestas.filter(r => !r.conforme).length;
+  document.getElementById('total-ok').textContent = ok;
+  document.getElementById('total-no').textContent = no;
+
+  const ahora = new Date();
+  document.getElementById('informe-meta').textContent =
+    `Operario: ${usuario.nombre} | Fecha: ${ahora.toLocaleDateString('es-AR')} | Inicio: ${horaInicio} | Fin: ${ahora.toLocaleTimeString('es-AR')}`;
+
+  let html = '';
+  respuestas.forEach(r => {
+    html += `<div class="informe-item">
+      <div>
+        <div style="font-size:0.88rem; font-weight:600;">${r.titulo}</div>
+        ${r.observacion ? `<div class="obs-texto">📝 ${r.observacion}</div>` : ''}
+      </div>
+      <span class="badge ${r.conforme ? 'badge-ok' : 'badge-no'}">${r.conforme ? '✅ Conforme' : '❌ No conforme'}</span>
+    </div>`;
+  });
+  document.getElementById('informe-items').innerHTML = html;
+
+  if (firmaDataURL) {
+    document.getElementById('informe-firma-box').style.display = 'block';
+    document.getElementById('informe-firma-img').src = firmaDataURL;
+  }
+}
+
+async function finalizarInforme() {
+  const ahora = new Date();
+  const informe = {
+    operario_nombre: usuario.nombre,
+    fecha: ahora.toISOString(),
+    hora_inicio: horaInicio,
+    hora_fin: ahora.toLocaleTimeString('es-AR'),
+    items: JSON.stringify(respuestas),
+    total_realizados: respuestas.filter(r => r.conforme).length,
+    total_no_realizados: respuestas.filter(r => !r.conforme).length
+  };
+
+  try {
+    await sbFetch('informes', 'POST', informe);
+  } catch(e) { console.log('Guardado local (sin Supabase)'); }
+
+  // Guardar también en localStorage como backup
+  const guardados = JSON.parse(localStorage.getItem('informes') || '[]');
+  guardados.unshift({ ...informe, id: Date.now() });
+  localStorage.setItem('informes', JSON.stringify(guardados));
+
+  alert('✅ Informe guardado correctamente. ¡Buen trabajo!');
+  respuestas = []; itemActual = 0; firmaDataURL = null;
+  document.getElementById('nombre-operario').textContent = usuario.nombre;
+  mostrar('menu');
+}
+
+// ===== ADMIN =====
+async function cargarAdmin() {
+  let informes = [];
+  try {
+    const data = await sbFetch('informes?order=fecha.desc');
+    if (data) informes = data;
+  } catch(e) {}
+
+  // Fallback localStorage
+  if (!informes.length) {
+    informes = JSON.parse(localStorage.getItem('informes') || '[]');
+  }
+
+  if (!informes.length) {
+    document.getElementById('admin-informes').innerHTML = `
+      <div class="empty-state"><div class="icon">📭</div><p>No hay informes todavía.</p></div>`;
+    return;
+  }
+
+  let html = '';
+  informes.forEach(inf => {
+    const items = typeof inf.items === 'string' ? JSON.parse(inf.items) : inf.items || [];
+    const fecha = new Date(inf.fecha).toLocaleDateString('es-AR');
+    const hora = new Date(inf.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    html += `<div class="informe-card">
+      <h3>👷 ${inf.operario_nombre}</h3>
+      <div class="meta">📅 ${fecha} a las ${hora} | ✅ ${inf.total_realizados} conformes | ❌ ${inf.total_no_realizados} no conformes</div>
+      <div class="mini-badges">`;
+    items.forEach(it => {
+      html += `<span class="badge ${it.conforme ? 'badge-ok' : 'badge-no'}">${it.conforme ? '✅' : '❌'} ${it.titulo}</span>`;
+      if (it.observacion) html += `<div class="obs-texto" style="width:100%">📝 ${it.titulo}: ${it.observacion}</div>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById('admin-informes').innerHTML = html;
+
+  // Operarios
+  let ops = [];
+  try {
+    const data = await sbFetch('usuarios?role=eq.operario');
+    if (data) ops = data;
+  } catch(e) {}
+
+  if (ops.length) {
+    let opHtml = '';
+    ops.forEach(op => {
+      opHtml += `<div class="informe-card"><h3>👷 ${op.nombre}</h3><div class="meta">Operario registrado</div></div>`;
+    });
+    document.getElementById('admin-operarios').innerHTML = opHtml;
+  } else {
+    document.getElementById('admin-operarios').innerHTML = `<div class="empty-state"><div class="icon">👷</div><p>Sin operarios registrados.</p></div>`;
+  }
+}
+
+function verTab(tab) {
+  document.getElementById('admin-informes').style.display = tab === 'informes' ? 'block' : 'none';
+  document.getElementById('admin-operarios').style.display = tab === 'operarios' ? 'block' : 'none';
+  document.getElementById('tab-informes').className = 'nav-tab' + (tab === 'informes' ? ' activo' : '');
+  document.getElementById('tab-operarios').className = 'nav-tab' + (tab === 'operarios' ? ' activo' : '');
+}
+
+// Enter en login
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) iniciarSesion();
+});
+</script>
+</body>
+</html>
 
