@@ -220,6 +220,9 @@
       <div class="nav-tab" id="tab-checklist" onclick="verTab('checklist')">⚙️ Checklist</div>
       <div class="nav-tab" id="tab-usuarios" onclick="verTab('usuarios')">👤 Usuarios</div>
     </div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button id="btn-actualizar" onclick="actualizarTab()" style="padding:6px 14px; border:none; border-radius:8px; background:#fff3e0; color:#e65c00; font-weight:700; cursor:pointer; font-size:0.85rem;">🔄 Actualizar</button>
+    </div>
     <div id="admin-informes"></div>
     <div id="admin-checklist" style="display:none;"></div>
     <div id="admin-usuarios" style="display:none;"></div>
@@ -692,7 +695,20 @@ async function cargarAdmin() {
   }
 }
 
-function verTab(tab) {
+function actualizarTab() {
+  const btn = document.getElementById('btn-actualizar');
+  btn.textContent = '⏳ Actualizando...';
+  btn.style.opacity = '0.6';
+  const tabActivo = document.getElementById('tab-informes').classList.contains('activo') ? 'informes'
+    : document.getElementById('tab-checklist').classList.contains('activo') ? 'checklist' : 'usuarios';
+  setTimeout(async () => {
+    if (tabActivo === 'informes') await cargarAdmin();
+    else if (tabActivo === 'checklist') await cargarAdminChecklist();
+    else if (tabActivo === 'usuarios') await cargarAdminUsuarios();
+    btn.textContent = '🔄 Actualizar';
+    btn.style.opacity = '1';
+  }, 300);
+}
   document.getElementById('admin-informes').style.display = tab === 'informes' ? 'block' : 'none';
   document.getElementById('admin-checklist').style.display = tab === 'checklist' ? 'block' : 'none';
   document.getElementById('admin-usuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
@@ -1013,7 +1029,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.4 – 10/05/2026 22:45
+  v2.5 – 10/05/2026 23:00
 </div>
 
 </body>
