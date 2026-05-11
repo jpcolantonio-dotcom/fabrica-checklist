@@ -277,6 +277,7 @@ let horaInicio = null;
 let firmaDataURL = null;
 let firmaCtx = null;
 let dibujando = false;
+let ubicacion = null;
 
 // ===== NAVEGACIÓN =====
 function mostrar(id) {
@@ -330,11 +331,28 @@ function cerrarSesion() {
 }
 
 // ===== CHECKLIST POR SECTORES =====
-function iniciarChecklist() {
+async function iniciarChecklist() {
   respuestas = [];
   sectorActual = 0;
+  ubicacion = null;
   horaInicio = new Date().toLocaleTimeString('es-AR');
   mostrar('checklist');
+
+  // Pedir ubicación
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        ubicacion = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          precision: Math.round(pos.coords.accuracy)
+        };
+      },
+      err => { ubicacion = null; },
+      { timeout: 8000 }
+    );
+  }
+
   renderSector();
 }
 
@@ -565,7 +583,8 @@ async function finalizarInforme() {
     hora_fin: ahora.toLocaleTimeString('es-AR'),
     items: JSON.stringify(respuestas),
     total_realizados: respuestas.filter(r => r.conforme).length,
-    total_no_realizados: respuestas.filter(r => !r.conforme).length
+    total_no_realizados: respuestas.filter(r => !r.conforme).length,
+    ubicacion: ubicacion ? JSON.stringify(ubicacion) : null
   };
 
   try {
@@ -625,7 +644,8 @@ async function cargarAdmin() {
         <h3>👷 ${inf.operario_nombre}</h3>
         <span style="background:${colorTotal}; color:white; padding:3px 10px; border-radius:12px; font-size:0.85rem; font-weight:700;">${totalPct}%</span>
       </div>
-      <div class="meta" style="margin-bottom:10px;">📅 ${fecha} a las ${hora} | ✅ ${inf.total_realizados} conformes | ❌ ${inf.total_no_realizados} no conformes</div>`;
+      <div class="meta" style="margin-bottom:6px;">📅 ${fecha} a las ${hora} | ✅ ${inf.total_realizados} conformes | ❌ ${inf.total_no_realizados} no conformes</div>
+      ${(() => { try { const u = typeof inf.ubicacion === 'string' ? JSON.parse(inf.ubicacion) : inf.ubicacion; return u ? `<div style="margin-bottom:10px;"><a href="https://maps.google.com/?q=${u.lat},${u.lng}" target="_blank" style="font-size:0.78rem; color:#1976d2; text-decoration:none;">📍 Ver ubicación en Maps</a></div>` : ''; } catch(e) { return ''; } })()}`;
 
     Object.entries(sectoresMap).forEach(([secNombre, secItems]) => {
       const secOk = secItems.filter(i => i.conforme).length;
@@ -993,7 +1013,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.3 – 10/05/2026 22:15
+  v2.4 – 10/05/2026 22:45
 </div>
 
 </body>
