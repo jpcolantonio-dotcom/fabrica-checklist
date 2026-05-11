@@ -696,6 +696,7 @@ async function cargarAdmin() {
 }
 
 function actualizarTab() {
+function actualizarTab() {
   const btn = document.getElementById('btn-actualizar');
   btn.textContent = '⏳ Actualizando...';
   btn.style.opacity = '0.6';
@@ -709,6 +710,8 @@ function actualizarTab() {
     btn.style.opacity = '1';
   }, 300);
 }
+
+function verTab(tab) {
   document.getElementById('admin-informes').style.display = tab === 'informes' ? 'block' : 'none';
   document.getElementById('admin-checklist').style.display = tab === 'checklist' ? 'block' : 'none';
   document.getElementById('admin-usuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
@@ -1029,7 +1032,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.5 – 10/05/2026 23:00
+  v2.6 – 10/05/2026 23:15
 </div>
 
 </body>
