@@ -676,23 +676,6 @@ async function cargarAdmin() {
     html += `</div>`;
   });
   document.getElementById('admin-informes').innerHTML = html;
-
-  // Operarios
-  let ops = [];
-  try {
-    const data = await sbFetch('usuarios?role=eq.operario');
-    if (data) ops = data;
-  } catch(e) {}
-
-  if (ops.length) {
-    let opHtml = '';
-    ops.forEach(op => {
-      opHtml += `<div class="informe-card"><h3>👷 ${op.nombre}</h3><div class="meta">Operario registrado</div></div>`;
-    });
-    document.getElementById('admin-operarios').innerHTML = opHtml;
-  } else {
-    document.getElementById('admin-operarios').innerHTML = `<div class="empty-state"><div class="icon">👷</div><p>Sin operarios registrados.</p></div>`;
-  }
 }
 
 function actualizarTab() {
@@ -1031,7 +1014,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.6 – 10/05/2026 23:15
+  v2.8 – 10/05/2026 23:45
 </div>
 
 </body>
