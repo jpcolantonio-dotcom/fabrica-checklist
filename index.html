@@ -1,3 +1,5 @@
+
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -579,6 +581,26 @@ function mostrarInforme() {
 
 async function finalizarInforme() {
   const ahora = new Date();
+
+  // Subir firma al storage
+  let firmaUrl = null;
+  if (firmaDataURL) {
+    try {
+      const blob = await fetch(firmaDataURL).then(r => r.blob());
+      const path = `firmas/${usuario.nombre.replace(/ /g,'_')}_${Date.now()}.png`;
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos/${path}`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'Content-Type': 'image/png'
+        },
+        body: blob
+      });
+      if (res.ok) firmaUrl = `${SUPABASE_URL}/storage/v1/object/public/fotos/${path}`;
+    } catch(e) { firmaUrl = firmaDataURL; }
+  }
+
   const informe = {
     operario_nombre: usuario.nombre,
     fecha: ahora.toISOString(),
@@ -588,7 +610,7 @@ async function finalizarInforme() {
     total_realizados: respuestas.filter(r => r.conforme).length,
     total_no_realizados: respuestas.filter(r => !r.conforme).length,
     ubicacion: ubicacion ? JSON.stringify(ubicacion) : null,
-    firma: firmaDataURL || null
+    firma: firmaUrl
   };
 
   try {
@@ -1022,7 +1044,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v2.9 – 11/05/2026 00:00
+  v3.0 – 11/05/2026 00:30
 </div>
 
 </body>
