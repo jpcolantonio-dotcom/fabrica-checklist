@@ -1,3 +1,5 @@
+
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -911,42 +913,57 @@ async function cargarAdminChecklist() {
   const cont = document.getElementById('admin-checklist');
   cont.innerHTML = '<p style="color:#888; font-size:0.85rem; padding:12px;">Cargando...</p>';
 
+  let checklists = [];
   let sectores = [];
   let items = [];
   try {
-    const ds = await sbFetch('sectores?order=orden.asc');
+    const dc = await sbFetch('checklists?order=orden.asc');
+    const ds = await sbFetch('sectores?order=orden.asc&select=id,nombre,orden,activo,checklist_id');
     const di = await sbFetch('checklist_items?order=orden.asc');
+    if (dc && dc.length) checklists = dc;
     if (ds && ds.length) sectores = ds;
     if (di && di.length) items = di;
   } catch(e) { console.error('Error cargando checklist admin:', e); }
 
-  // Lista de ítems por sector
-  const listaHTML = sectores.length === 0
-    ? `<div class="empty-state"><div class="icon">📍</div><p>No hay sectores todavía.</p></div>`
-    : sectores.map((sec, sidx) => {
-        const its = items.filter(i => i.sector_id === sec.id);
+  // Lista organizada por checklist → sectores → ítems
+  const listaHTML = checklists.length === 0
+    ? `<div class="empty-state"><div class="icon">📋</div><p>No hay checklists todavía.</p></div>`
+    : checklists.map(cl => {
+        const secsDeCl = sectores.filter(s => s.checklist_id === cl.id);
         return `
-          <div style="margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-              <div style="background:#e65c00; color:white; padding:3px 10px; border-radius:12px; font-size:0.8rem; font-weight:700;">📍 ${sec.nombre}</div>
-              <button onclick="eliminarSector(${sec.id})" style="padding:2px 7px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
+          <div style="margin-bottom:16px; border:2px solid #e65c00; border-radius:10px; padding:10px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+              <div style="background:#e65c00; color:white; padding:4px 12px; border-radius:12px; font-size:0.85rem; font-weight:700;">📋 ${cl.nombre}</div>
+              <button onclick="eliminarChecklist(${cl.id})" style="padding:2px 7px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
             </div>
-            ${its.length === 0
-              ? `<div style="font-size:0.8rem; color:#aaa; padding-left:8px;">Sin ítems</div>`
-              : its.map((it, idx) => `
-                <div class="informe-card" style="margin-bottom:6px; padding:10px;">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <div style="display:flex; flex-direction:column; gap:2px;">
-                      <button onclick="moverItem(${it.id}, 'arriba')" style="padding:1px 5px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.75rem; ${idx===0?'opacity:0.3':''}" ${idx===0?'disabled':''}>▲</button>
-                      <button onclick="moverItem(${it.id}, 'abajo')" style="padding:1px 5px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.75rem; ${idx===its.length-1?'opacity:0.3':''}" ${idx===its.length-1?'disabled':''}>▼</button>
-                    </div>
-                    <div style="flex:1; font-size:0.82rem; font-weight:600;">${idx+1}. ${it.titulo}</div>
-                    <div style="display:flex; gap:4px;">
-                      <button onclick="editarItem(${it.id})" style="padding:3px 6px; border:none; border-radius:5px; background:#fff3e0; color:#e65c00; cursor:pointer;">✏️</button>
-                      <button onclick="eliminarItem(${it.id})" style="padding:3px 6px; border:none; border-radius:5px; background:#ffebee; color:#c62828; cursor:pointer;">🗑</button>
-                    </div>
-                  </div>
-                </div>`).join('')}
+            ${secsDeCl.length === 0
+              ? `<div style="font-size:0.8rem; color:#aaa; padding-left:8px;">Sin sectores</div>`
+              : secsDeCl.map(sec => {
+                  const its = items.filter(i => i.sector_id === sec.id);
+                  return `
+                    <div style="margin-bottom:8px; padding-left:8px; border-left:3px solid #f9a825;">
+                      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                        <span style="font-size:0.82rem; font-weight:700; color:#e65c00;">📍 ${sec.nombre}</span>
+                        <button onclick="eliminarSector(${sec.id})" style="padding:1px 6px; border:none; border-radius:4px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.72rem;">🗑</button>
+                      </div>
+                      ${its.length === 0
+                        ? `<div style="font-size:0.75rem; color:#aaa; padding-left:8px;">Sin ítems</div>`
+                        : its.map((it, idx) => `
+                          <div class="informe-card" style="margin-bottom:4px; padding:8px;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                              <div style="display:flex; flex-direction:column; gap:1px;">
+                                <button onclick="moverItem(${it.id}, 'arriba')" style="padding:1px 4px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.7rem; ${idx===0?'opacity:0.3':''}" ${idx===0?'disabled':''}>▲</button>
+                                <button onclick="moverItem(${it.id}, 'abajo')" style="padding:1px 4px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.7rem; ${idx===its.length-1?'opacity:0.3':''}" ${idx===its.length-1?'disabled':''}>▼</button>
+                              </div>
+                              <div style="flex:1; font-size:0.8rem;">${idx+1}. ${it.titulo}</div>
+                              <div style="display:flex; gap:3px;">
+                                <button onclick="editarItem(${it.id})" style="padding:2px 5px; border:none; border-radius:4px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.75rem;">✏️</button>
+                                <button onclick="eliminarItem(${it.id})" style="padding:2px 5px; border:none; border-radius:4px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
+                              </div>
+                            </div>
+                          </div>`).join('')}
+                    </div>`;
+                }).join('')}
           </div>`;
       }).join('');
 
@@ -955,15 +972,27 @@ async function cargarAdminChecklist() {
       <!-- IZQUIERDA -->
       <div style="display:flex; flex-direction:column; gap:12px;">
         <div class="card" style="margin-bottom:0;">
+          <h2 style="margin-bottom:12px;">📋 Nuevo checklist</h2>
+          <input type="text" id="nuevo-checklist-nombre" placeholder="Ej: COCINA" />
+          <button class="btn btn-primary" onclick="agregarChecklist()">Agregar checklist</button>
+        </div>
+        <div class="card" style="margin-bottom:0;">
           <h2 style="margin-bottom:12px;">📍 Nuevo sector</h2>
+          <select id="nuevo-sector-checklist" style="margin-bottom:8px;">
+            <option value="">Seleccioná el checklist...</option>
+            ${checklists.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}
+          </select>
           <input type="text" id="nuevo-sector" placeholder="Ej: Sector Producción" />
           <button class="btn btn-primary" onclick="agregarSector()">Agregar sector</button>
         </div>
         <div class="card" style="margin-bottom:0;">
           <h2 style="margin-bottom:12px;">➕ Nuevo ítem</h2>
-          <select id="nuevo-item-sector" style="margin-bottom:12px;">
+          <select id="nuevo-item-sector" style="margin-bottom:8px;">
             <option value="">Seleccioná el sector...</option>
-            ${sectores.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}
+            ${sectores.map(s => {
+              const cl = checklists.find(c => c.id === s.checklist_id);
+              return `<option value="${s.id}">${cl ? cl.nombre + ' → ' : ''}${s.nombre}</option>`;
+            }).join('')}
           </select>
           <input type="text" id="nuevo-titulo" placeholder="Nombre del ítem" />
           <textarea id="nuevo-descripcion" placeholder="Instrucción (opcional)..." style="min-height:60px;"></textarea>
@@ -971,20 +1000,61 @@ async function cargarAdminChecklist() {
         </div>
       </div>
       <!-- DERECHA -->
-      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:70vh;">
-        <h2 style="margin-bottom:12px;">📋 Checklist actual</h2>
+      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:80vh;">
+        <h2 style="margin-bottom:12px;">📋 Estructura actual</h2>
         <div id="items-lista">${listaHTML}</div>
       </div>
     </div>`;
 }
 
+async function agregarChecklist() {
+  const nombre = document.getElementById('nuevo-checklist-nombre').value.trim().toUpperCase();
+  if (!nombre) { alert('Escribí el nombre del checklist'); return; }
+  try {
+    const data = await sbFetch('checklists?order=orden.desc&limit=1');
+    const orden = data && data.length > 0 ? data[0].orden + 1 : 1;
+    await sbFetch('checklists', 'POST', { nombre, orden, activo: true });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al agregar checklist.'); }
+}
+
+async function eliminarChecklist(id) {
+  if (!confirm('¿Eliminás este checklist y todos sus sectores e ítems?')) return;
+  try {
+    // Obtener sectores del checklist
+    const secs = await sbFetch(`sectores?checklist_id=eq.${id}`);
+    if (secs && secs.length) {
+      for (const sec of secs) {
+        await fetch(`${SUPABASE_URL}/rest/v1/checklist_items?sector_id=eq.${sec.id}`, {
+          method: 'DELETE',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+        });
+      }
+      await fetch(`${SUPABASE_URL}/rest/v1/sectores?checklist_id=eq.${id}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/checklists?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    await cargarItems();
+    await cargarAdminChecklist();
+  } catch(e) { alert('Error al eliminar checklist.'); }
+}
+}
+
 async function agregarSector() {
   const nombre = document.getElementById('nuevo-sector').value.trim();
+  const checklistId = parseInt(document.getElementById('nuevo-sector-checklist')?.value);
   if (!nombre) { alert('Escribí el nombre del sector'); return; }
+  if (!checklistId) { alert('Seleccioná el checklist'); return; }
   try {
-    const data = await sbFetch('sectores?order=orden.desc&limit=1');
+    const data = await sbFetch(`sectores?checklist_id=eq.${checklistId}&order=orden.desc&limit=1`);
     const orden = data && data.length > 0 ? data[0].orden + 1 : 1;
-    await sbFetch('sectores', 'POST', { nombre, orden, activo: true });
+    await sbFetch('sectores', 'POST', { nombre, orden, activo: true, checklist_id: checklistId });
     await cargarItems();
     await cargarAdminChecklist();
   } catch(e) { alert('Error al agregar sector.'); }
@@ -1127,7 +1197,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.5 – 12/05/2026 11:00
+  v3.6 – 12/05/2026 11:30
 </div>
 
 </body>
