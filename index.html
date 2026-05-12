@@ -175,8 +175,8 @@
 <div id="screen-menu" class="screen">
   <div class="card" style="margin-top:20px;">
     <h2>👋 Bienvenido, <span id="nombre-operario"></span></h2>
-    <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">¿Listo para el checklist de cierre?</p>
-    <button class="btn btn-primary" onclick="iniciarChecklist()">▶ Iniciar Checklist</button>
+    <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">Seleccioná el checklist a completar:</p>
+    <div id="lista-checklists"></div>
     <button class="btn btn-secondary" onclick="activarNotificaciones()" id="btn-notif" style="margin-top:8px;">🔔 Activar notificaciones</button>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Cerrar sesión</button>
   </div>
@@ -267,21 +267,37 @@ async function sbFetch(path, method = 'GET', body = null) {
 // ===== CHECKLIST ITEMS =====
 let ITEMS = [];
 let SECTORES = [];
+let CHECKLISTS = [];
+let checklistSeleccionado = null;
 
 async function cargarItems() {
   try {
+    const cls = await sbFetch('checklists?activo=eq.true&order=orden.asc');
     const sectores = await sbFetch('sectores?activo=eq.true&order=orden.asc');
     const items = await sbFetch('checklist_items?activo=eq.true&order=orden.asc');
-    if (sectores && sectores.length > 0) SECTORES = sectores;
-    if (items && items.length > 0) ITEMS = items;
+    if (cls && cls.length) CHECKLISTS = cls;
+    if (sectores && sectores.length) SECTORES = sectores;
+    if (items && items.length) ITEMS = items;
   } catch(e) {}
-  // Fallback
-  if (!SECTORES.length) SECTORES = [{ id: 1, nombre: 'Depósito de Harinas', orden: 1 }];
+  if (!CHECKLISTS.length) CHECKLISTS = [{ id: 1, nombre: 'JOSELITO', orden: 1 }];
+  if (!SECTORES.length) SECTORES = [{ id: 1, nombre: 'Depósito de Harinas', orden: 1, checklist_id: 1 }];
   if (!ITEMS.length) ITEMS = [
     { id: 1, titulo: "Puertas cerradas – Depósito de Harinas", descripcion: "", sector_id: 1 },
     { id: 2, titulo: "Piso listo – Depósito de Harinas", descripcion: "", sector_id: 1 },
     { id: 3, titulo: "Cortina depósito harinas limpia", descripcion: "", sector_id: 1 },
   ];
+}
+
+function mostrarListaChecklists() {
+  const cont = document.getElementById('lista-checklists');
+  if (!CHECKLISTS.length) {
+    cont.innerHTML = '<p style="color:#888; font-size:0.85rem;">No hay checklists disponibles.</p>';
+    return;
+  }
+  cont.innerHTML = CHECKLISTS.map(cl => `
+    <button class="btn btn-primary" style="margin-bottom:8px;" onclick="iniciarChecklist(${cl.id}, '${cl.nombre}')">
+      📋 ${cl.nombre}
+    </button>`).join('');
 }
 
 // ===== ESTADO =====
@@ -334,6 +350,7 @@ async function iniciarSesion() {
     mostrar('admin');
   } else {
     document.getElementById('nombre-operario').textContent = usuario.nombre;
+    mostrarListaChecklists();
     mostrar('menu');
   }
 }
@@ -346,14 +363,15 @@ function cerrarSesion() {
 }
 
 // ===== CHECKLIST POR SECTORES =====
-async function iniciarChecklist() {
+async function iniciarChecklist(checklistId, checklistNombre) {
   respuestas = [];
   sectorActual = 0;
   ubicacion = null;
+  checklistSeleccionado = { id: checklistId, nombre: checklistNombre };
   horaInicio = new Date().toLocaleTimeString('es-AR');
   mostrar('checklist');
 
-  // Pedir ubicación
+  // Pedir ubicación silenciosamente
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -368,16 +386,27 @@ async function iniciarChecklist() {
     );
   }
 
-  renderSector();
+  // Filtrar sectores del checklist seleccionado
+  const sectoresFiltrados = SECTORES.filter(s => s.checklist_id === checklistId);
+  if (!sectoresFiltrados.length) {
+    alert('Este checklist no tiene sectores configurados todavía.');
+    mostrar('menu');
+    return;
+  }
+
+  renderSector(sectoresFiltrados);
 }
 
-function renderSector() {
-  const sector = SECTORES[sectorActual];
+let sectoresActuales = [];
+
+function renderSector(sectores) {
+  if (sectores) sectoresActuales = sectores;
+  const sector = sectoresActuales[sectorActual];
   const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
-  const pct = Math.round((sectorActual / SECTORES.length) * 100);
+  const pct = Math.round((sectorActual / sectoresActuales.length) * 100);
 
   document.getElementById('progreso-fill').style.width = pct + '%';
-  document.getElementById('progreso-texto').textContent = `Sector ${sectorActual + 1} / ${SECTORES.length}`;
+  document.getElementById('progreso-texto').textContent = `${checklistSeleccionado.nombre} – Sector ${sectorActual + 1} / ${sectoresActuales.length}`;
 
   let itemsHTML = itemsDelSector.map((it, idx) => `
     <div style="border-bottom: ${idx < itemsDelSector.length-1 ? '1px solid #f0f0f0' : 'none'}; padding: 12px 0;">
@@ -402,7 +431,7 @@ function renderSector() {
       </div>
       ${itemsHTML}
       <button id="btn-continuar-sector" class="btn btn-primary btn-disabled" style="margin-top:16px;" onclick="confirmarSector()">
-        ${sectorActual < SECTORES.length - 1 ? 'Siguiente sector →' : 'Finalizar ✅'}
+        ${sectorActual < sectoresActuales.length - 1 ? 'Siguiente sector →' : 'Finalizar ✅'}
       </button>
     </div>`;
 
@@ -423,7 +452,7 @@ function seleccionarEstadoItem(itemId, conforme) {
     btnOk.style.opacity = '0.4'; btnOk.style.transform = 'scale(1)';
   }
   // Habilitar continuar si todos marcados
-  const sector = SECTORES[sectorActual];
+  const sector = sectoresActuales[sectorActual];
   const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
   const todosMarcados = itemsDelSector.every(it => window._estadosSector[it.id] !== null);
   const btnCont = document.getElementById('btn-continuar-sector');
@@ -442,7 +471,7 @@ function previewFotoItem(input, itemId) {
 }
 
 async function confirmarSector() {
-  const sector = SECTORES[sectorActual];
+  const sector = sectoresActuales[sectorActual];
   const itemsDelSector = ITEMS.filter(it => it.sector_id === sector.id);
 
   for (const it of itemsDelSector) {
@@ -463,11 +492,11 @@ async function confirmarSector() {
   }
 
   sectorActual++;
-  if (sectorActual < SECTORES.length) {
+  if (sectorActual < sectoresActuales.length) {
     renderSector();
   } else {
     document.getElementById('progreso-fill').style.width = '100%';
-    document.getElementById('progreso-texto').textContent = `${SECTORES.length} / ${SECTORES.length} sectores completados`;
+    document.getElementById('progreso-texto').textContent = `${sectoresActuales.length} / ${sectoresActuales.length} sectores completados`;
     iniciarFirma();
   }
 }
@@ -620,7 +649,8 @@ async function finalizarInforme() {
     total_realizados: respuestas.filter(r => r.conforme).length,
     total_no_realizados: respuestas.filter(r => !r.conforme).length,
     ubicacion: ubicacion ? JSON.stringify(ubicacion) : null,
-    firma: firmaUrl
+    firma: firmaUrl,
+    checklist_nombre: checklistSeleccionado ? checklistSeleccionado.nombre : 'General'
   };
 
   try {
@@ -716,8 +746,11 @@ async function cargarAdmin() {
     const colorTotal = totalPct >= 80 ? '#4caf50' : totalPct >= 50 ? '#ff9800' : '#f44336';
 
     html += `<div class="informe-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <h3>👷 ${inf.operario_nombre}</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div>
+          <h3>👷 ${inf.operario_nombre}</h3>
+          ${inf.checklist_nombre ? `<div style="font-size:0.75rem; color:#e65c00; font-weight:600;">📋 ${inf.checklist_nombre}</div>` : ''}
+        </div>
         <span style="background:${colorTotal}; color:white; padding:3px 10px; border-radius:12px; font-size:0.85rem; font-weight:700;">${totalPct}%</span>
       </div>
       <div class="meta" style="margin-bottom:6px;">📅 ${fecha} a las ${hora} | ✅ ${inf.total_realizados} conformes | ❌ ${inf.total_no_realizados} no conformes</div>
@@ -1094,7 +1127,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.3 – 12/05/2026 10:00
+  v3.4 – 12/05/2026 10:30
 </div>
 
 </body>
