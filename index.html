@@ -177,6 +177,7 @@
     <h2>👋 Bienvenido, <span id="nombre-operario"></span></h2>
     <p style="color:#666; font-size:0.9rem; margin-bottom:16px;">¿Listo para el checklist de cierre?</p>
     <button class="btn btn-primary" onclick="iniciarChecklist()">▶ Iniciar Checklist</button>
+    <button class="btn btn-secondary" onclick="activarNotificaciones()" id="btn-notif" style="margin-top:8px;">🔔 Activar notificaciones</button>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Cerrar sesión</button>
   </div>
 </div>
@@ -643,7 +644,19 @@ async function finalizarInforme() {
   mostrar('menu');
 }
 
-// ===== NOTIFICACIONES PUSH =====
+async function activarNotificaciones() {
+  try {
+    await OneSignal.Notifications.requestPermission();
+    const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
+    if (isSubscribed) {
+      document.getElementById('btn-notif').textContent = '✅ Notificaciones activas';
+      document.getElementById('btn-notif').style.background = '#e8f5e9';
+      document.getElementById('btn-notif').style.color = '#2e7d32';
+    }
+  } catch(e) {
+    alert('No se pudieron activar las notificaciones. Verificá los permisos del navegador.');
+  }
+}
 const ONESIGNAL_API_KEY = "wfouvrvszepmfiyrswveuguus";
 const ONESIGNAL_APP_ID = "82da54b1-d7b7-443c-b2a5-7d6e5e2cde2c";
 
@@ -1081,7 +1094,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.2 – 12/05/2026 09:15
+  v3.3 – 12/05/2026 10:00
 </div>
 
 </body>
