@@ -273,12 +273,12 @@ let checklistSeleccionado = null;
 async function cargarItems() {
   try {
     const cls = await sbFetch('checklists?activo=eq.true&order=orden.asc');
-    const sectores = await sbFetch('sectores?activo=eq.true&order=orden.asc');
+    const sectores = await sbFetch('sectores?activo=eq.true&order=orden.asc&select=id,nombre,orden,activo,checklist_id');
     const items = await sbFetch('checklist_items?activo=eq.true&order=orden.asc');
     if (cls && cls.length) CHECKLISTS = cls;
     if (sectores && sectores.length) SECTORES = sectores;
     if (items && items.length) ITEMS = items;
-  } catch(e) {}
+  } catch(e) { console.error('Error cargando datos:', e); }
   if (!CHECKLISTS.length) CHECKLISTS = [{ id: 1, nombre: 'JOSELITO', orden: 1 }];
   if (!SECTORES.length) SECTORES = [{ id: 1, nombre: 'Depósito de Harinas', orden: 1, checklist_id: 1 }];
   if (!ITEMS.length) ITEMS = [
@@ -1127,7 +1127,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.4 – 12/05/2026 10:30
+  v3.5 – 12/05/2026 11:00
 </div>
 
 </body>
