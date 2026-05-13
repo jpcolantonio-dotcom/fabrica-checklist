@@ -19,7 +19,7 @@
       });
     });
     // Inicializar EmailJS
-    emailjs.init(EMAILJS_PUBLIC_KEY);
+    emailjs.init('K_d0ZXqshwAeBO-ok');
   </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,7 +40,8 @@
     .header p { font-size: 0.75rem; opacity: 0.9; }
 
     /* PANTALLAS */
-    .screen { display: none; padding: 20px; max-width: 500px; margin: 0 auto; }
+    .screen { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    #screen-admin { max-width: 100%; padding: 20px 40px; }
     .screen.active { display: block; }
 
     /* CARD */
@@ -1133,8 +1134,8 @@ async function cargarAdminChecklist() {
       }).join('');
 
   cont.innerHTML = `
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
-      <!-- IZQUIERDA -->
+    <div style="display:grid; grid-template-columns:320px 1fr; gap:12px; margin-bottom:8px; width:100%;">
+      <!-- IZQUIERDA FIJA -->
       <div style="display:flex; flex-direction:column; gap:12px;">
         <div class="card" style="margin-bottom:0;">
           <h2 style="margin-bottom:12px;">📋 Nuevo checklist</h2>
@@ -1432,7 +1433,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v4.0 – 12/05/2026 18:00
+  v4.1 – 12/05/2026 18:30
 </div>
 
 </body>
