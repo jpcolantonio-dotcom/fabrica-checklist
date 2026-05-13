@@ -1,5 +1,4 @@
 
-<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -290,13 +289,27 @@ async function cargarItems() {
   ];
 }
 
-function mostrarListaChecklists() {
+async function mostrarListaChecklists() {
   const cont = document.getElementById('lista-checklists');
-  if (!CHECKLISTS.length) {
-    cont.innerHTML = '<p style="color:#888; font-size:0.85rem;">No hay checklists disponibles.</p>';
+  
+  let checklistsVisibles = CHECKLISTS;
+  
+  // Si es operario, filtrar por permisos
+  if (usuario.role !== 'admin') {
+    try {
+      const permisos = await sbFetch(`usuario_checklists?usuario_id=eq.${usuario.id}`);
+      if (permisos && permisos.length > 0) {
+        const idsPermitidos = permisos.map(p => p.checklist_id);
+        checklistsVisibles = CHECKLISTS.filter(cl => idsPermitidos.includes(cl.id));
+      }
+    } catch(e) {}
+  }
+
+  if (!checklistsVisibles.length) {
+    cont.innerHTML = '<p style="color:#888; font-size:0.9rem;">No tenés checklists asignados. Contactá al administrador.</p>';
     return;
   }
-  cont.innerHTML = CHECKLISTS.map(cl => `
+  cont.innerHTML = checklistsVisibles.map(cl => `
     <button class="btn btn-primary" style="margin-bottom:8px;" onclick="iniciarChecklist(${cl.id}, '${cl.nombre}')">
       📋 ${cl.nombre}
     </button>`).join('');
@@ -711,6 +724,68 @@ async function enviarNotificacion(operarioNombre, porcentaje) {
     });
   } catch(e) { console.log('Error enviando notificación:', e); }
 }
+// ===== EMAILS POR CHECKLIST =====
+async function agregarEmail() {
+  const checklistId = parseInt(document.getElementById('email-checklist-sel')?.value);
+  const email = document.getElementById('nuevo-email').value.trim();
+  if (!checklistId) { alert('Seleccioná un checklist'); return; }
+  if (!email || !email.includes('@')) { alert('Ingresá un email válido'); return; }
+  try {
+    const existing = await sbFetch(`checklist_emails?checklist_id=eq.${checklistId}`);
+    if (existing && existing.length >= 6) { alert('Máximo 6 emails por checklist'); return; }
+    await sbFetch('checklist_emails', 'POST', { checklist_id: checklistId, email });
+    document.getElementById('nuevo-email').value = '';
+    cargarEmailsChecklist(checklistId);
+  } catch(e) { alert('Error al agregar email.'); }
+}
+
+async function cargarEmailsChecklist(checklistId) {
+  if (!checklistId) return;
+  const cont = document.getElementById('lista-emails');
+  if (!cont) return;
+  try {
+    const data = await sbFetch(`checklist_emails?checklist_id=eq.${checklistId}`);
+    if (!data || !data.length) { cont.innerHTML = '<p style="font-size:0.78rem; color:#aaa;">Sin emails configurados.</p>'; return; }
+    cont.innerHTML = data.map(e => `
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <span style="flex:1; font-size:0.78rem;">📧 ${e.email}</span>
+        <button onclick="eliminarEmail(${e.id}, ${checklistId})" style="padding:2px 6px; border:none; border-radius:4px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.72rem;">🗑</button>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function eliminarEmail(id, checklistId) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/checklist_emails?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+    });
+    cargarEmailsChecklist(checklistId);
+  } catch(e) { alert('Error al eliminar email.'); }
+}
+
+// ===== PERMISOS USUARIO-CHECKLIST =====
+async function cargarPermisosUsuario(usuarioId) {
+  try {
+    const data = await sbFetch(`usuario_checklists?usuario_id=eq.${usuarioId}`);
+    return data ? data.map(d => d.checklist_id) : [];
+  } catch(e) { return []; }
+}
+
+async function togglePermisoChecklist(usuarioId, checklistId, tienePermiso) {
+  try {
+    if (tienePermiso) {
+      await fetch(`${SUPABASE_URL}/rest/v1/usuario_checklists?usuario_id=eq.${usuarioId}&checklist_id=eq.${checklistId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+    } else {
+      await sbFetch('usuario_checklists', 'POST', { usuario_id: usuarioId, checklist_id: checklistId });
+    }
+    cargarAdminUsuarios();
+  } catch(e) { alert('Error al cambiar permiso.'); }
+}
+
 async function cargarAdmin() {
   let informes = [];
   try {
@@ -829,20 +904,44 @@ async function cargarAdminUsuarios() {
     if (data) usuarios = data;
   } catch(e) {}
 
-  // Guardar IDs en dataset para evitar problemas con UUIDs
+  // Cargar checklists y permisos
+  let checklists = [];
+  let todosPermisos = [];
+  try {
+    const dc = await sbFetch('checklists?order=orden.asc');
+    const dp = await sbFetch('usuario_checklists');
+    if (dc) checklists = dc;
+    if (dp) todosPermisos = dp;
+  } catch(e) {}
+
   const listaHTML = usuarios.map(u => {
     const safeId = u.id;
     const safeName = u.nombre.replace(/'/g, "&#39;");
+    const permisosUsuario = todosPermisos.filter(p => p.usuario_id === u.id).map(p => p.checklist_id);
+    const checklistBtns = u.role !== 'admin' ? checklists.map(cl => {
+      const tiene = permisosUsuario.includes(cl.id);
+      return `<button onclick="togglePermisoChecklist('${safeId}', ${cl.id}, ${tiene})" 
+        style="padding:3px 8px; border:none; border-radius:6px; background:${tiene ? '#e8f5e9' : '#f5f5f5'}; 
+        color:${tiene ? '#2e7d32' : '#999'}; cursor:pointer; font-size:0.72rem; font-weight:600;">
+        ${tiene ? '✅' : '○'} ${cl.nombre}</button>`;
+    }).join('') : '<span style="font-size:0.75rem; color:#e65c00;">Acceso total</span>';
+
     return `
-    <div class="informe-card" style="margin-bottom:8px;" data-uid="${safeId}">
-      <div style="display:flex; align-items:center; gap:8px;">
+    <div class="informe-card" style="margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
         <div style="flex:1;">
           <div style="font-weight:600; font-size:0.88rem;">${u.nombre}</div>
-          <div style="font-size:0.75rem; color:#888;">${u.role === 'admin' ? '👑 Admin' : '👷 Operario'}</div>
+          <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+            <select onchange="cambiarRol('${safeId}', this.value)" style="font-size:0.72rem; padding:2px 4px; border:1px solid #ddd; border-radius:4px;">
+              <option value="operario" ${u.role === 'operario' ? 'selected' : ''}>👷 Operario</option>
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>👑 Admin</option>
+            </select>
+          </div>
         </div>
-        <button onclick="cambiarClave('${safeId}', '${safeName}')" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.78rem;">🔑 Clave</button>
+        <button onclick="cambiarClave('${safeId}', '${safeName}')" style="padding:4px 8px; border:none; border-radius:6px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.78rem;">🔑</button>
         <button onclick="eliminarUsuario('${safeId}', '${safeName}')" style="padding:4px 8px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.78rem;">🗑</button>
       </div>
+      <div style="display:flex; flex-wrap:wrap; gap:4px;">${checklistBtns}</div>
     </div>`}).join('');
 
   cont.innerHTML = `
@@ -864,6 +963,16 @@ async function cargarAdminUsuarios() {
         ${listaHTML || '<div class="empty-state"><div class="icon">👤</div><p>Sin usuarios.</p></div>'}
       </div>
     </div>`;
+}
+
+async function cambiarRol(id, nuevoRol) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/usuarios?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: nuevoRol })
+    });
+  } catch(e) { alert('Error al cambiar rol.'); }
 }
 
 async function agregarUsuario() {
@@ -968,7 +1077,7 @@ async function cargarAdminChecklist() {
       }).join('');
 
   cont.innerHTML = `
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:12px; margin-bottom:8px;">
       <!-- IZQUIERDA -->
       <div style="display:flex; flex-direction:column; gap:12px;">
         <div class="card" style="margin-bottom:0;">
@@ -998,9 +1107,19 @@ async function cargarAdminChecklist() {
           <textarea id="nuevo-descripcion" placeholder="Instrucción (opcional)..." style="min-height:60px;"></textarea>
           <button class="btn btn-primary" onclick="agregarItem()">Agregar ítem</button>
         </div>
+        <div class="card" style="margin-bottom:0;">
+          <h2 style="margin-bottom:12px;">📧 Emails por checklist</h2>
+          <select id="email-checklist-sel" style="margin-bottom:8px;">
+            <option value="">Seleccioná el checklist...</option>
+            ${checklists.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}
+          </select>
+          <input type="text" id="nuevo-email" placeholder="email@ejemplo.com" />
+          <button class="btn btn-primary" onclick="agregarEmail()">Agregar email</button>
+          <div id="lista-emails" style="margin-top:8px;"></div>
+        </div>
       </div>
-      <!-- DERECHA -->
-      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:80vh;">
+      <!-- DERECHA - MÁS ANCHA -->
+      <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:85vh;">
         <h2 style="margin-bottom:12px;">📋 Estructura actual</h2>
         <div id="items-lista">${listaHTML}</div>
       </div>
@@ -1196,7 +1315,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.6 – 12/05/2026 11:30
+  v3.8 – 12/05/2026 12:30
 </div>
 
 </body>
