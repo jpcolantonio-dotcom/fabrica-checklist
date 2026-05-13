@@ -852,11 +852,27 @@ async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId,
     const emailsData = await sbFetch(`checklist_emails?checklist_id=eq.${checklistId}`);
     if (!emailsData || !emailsData.length) return;
 
-    // Generar PDF
-    let pdfDataUri = null;
+    // Generar PDF y subirlo a Supabase Storage
+    let pdfUrl = null;
     try {
-      pdfDataUri = await generarPDF(operarioNombre, checklistNombre, porcentaje, resps, firmaUrl);
-    } catch(e) { console.error('Error generando PDF:', e); }
+      const pdfDataUri = await generarPDF(operarioNombre, checklistNombre, porcentaje, resps, firmaUrl);
+      const pdfBase64 = pdfDataUri.split(',')[1];
+      const byteString = atob(pdfBase64);
+      const byteArray = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i++) byteArray[i] = byteString.charCodeAt(i);
+      const pdfBlob = new Blob([byteArray], { type: 'application/pdf' });
+      const pdfPath = `informes/${operarioNombre.replace(/ /g,'_')}_${checklistNombre}_${Date.now()}.pdf`;
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos/${pdfPath}`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'Content-Type': 'application/pdf'
+        },
+        body: pdfBlob
+      });
+      if (res.ok) pdfUrl = `${SUPABASE_URL}/storage/v1/object/public/fotos/${pdfPath}`;
+    } catch(e) { console.error('Error generando/subiendo PDF:', e); }
 
     const sectoresMap = {};
     resps.forEach(r => {
@@ -874,6 +890,10 @@ async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId,
       });
     });
 
+    if (pdfUrl) {
+      detalle += `<br><a href="${pdfUrl}" style="display:inline-block;padding:10px 20px;background:#e65c00;color:white;border-radius:8px;text-decoration:none;font-weight:bold;">📄 Descargar informe PDF</a>`;
+    }
+
     const fecha = new Date().toLocaleString('es-AR');
 
     for (const ed of emailsData) {
@@ -886,7 +906,7 @@ async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId,
         detalle: detalle
       }, EMAILJS_PUBLIC_KEY);
     }
-    console.log('Emails enviados correctamente');
+    console.log('Emails enviados con PDF link');
   } catch(e) { console.error('Error enviando emails:', e); }
 }
 
@@ -1561,7 +1581,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v4.3 – 13/05/2026 10:00
+  v4.4 – 13/05/2026 10:30
 </div>
 
 </body>
