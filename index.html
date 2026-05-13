@@ -1,4 +1,5 @@
 
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -6,6 +7,7 @@
   <title>Planeta Empanada – Checklist</title>
   <meta name="theme-color" content="#e65c00" />
   <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -16,6 +18,8 @@
         allowLocalhostAsSecureOrigin: true
       });
     });
+    // Inicializar EmailJS
+    emailjs.init(EMAILJS_PUBLIC_KEY);
   </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -678,6 +682,17 @@ async function finalizarInforme() {
   const porcentaje = total > 0 ? Math.round((conformes / total) * 100) : 0;
   await enviarNotificacion(usuario.nombre, porcentaje);
 
+  // Enviar emails
+  if (checklistSeleccionado) {
+    await enviarEmailsInforme(
+      usuario.nombre,
+      checklistSeleccionado.nombre,
+      checklistSeleccionado.id,
+      porcentaje,
+      respuestas
+    );
+  }
+
   // Guardar también en localStorage como backup
   const guardados = JSON.parse(localStorage.getItem('informes') || '[]');
   guardados.unshift({ ...informe, id: Date.now() });
@@ -704,6 +719,47 @@ async function activarNotificaciones() {
 }
 const ONESIGNAL_API_KEY = "wfouvrvszepmfiyrswveuguus";
 const ONESIGNAL_APP_ID = "82da54b1-d7b7-443c-b2a5-7d6e5e2cde2c";
+
+// ===== EMAILJS =====
+const EMAILJS_SERVICE_ID = 'service_27t3ueo';
+const EMAILJS_TEMPLATE_ID = 'ogbb2op';
+const EMAILJS_PUBLIC_KEY = 'K_d0ZXqshwAeBO-ok';
+
+async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId, porcentaje, resps) {
+  try {
+    const emailsData = await sbFetch(`checklist_emails?checklist_id=eq.${checklistId}`);
+    if (!emailsData || !emailsData.length) return;
+
+    const sectoresMap = {};
+    resps.forEach(r => {
+      const sec = r.sector || 'General';
+      if (!sectoresMap[sec]) sectoresMap[sec] = [];
+      sectoresMap[sec].push(r);
+    });
+
+    let detalle = '';
+    Object.entries(sectoresMap).forEach(([sec, items]) => {
+      const pct = Math.round((items.filter(i => i.conforme).length / items.length) * 100);
+      detalle += `<p style="font-weight:bold;color:#e65c00;margin:8px 0 4px;">📍 ${sec} — ${pct}%</p>`;
+      items.forEach(it => {
+        detalle += `<p style="margin:2px 0;font-size:13px;">${it.conforme ? '✅' : '❌'} ${it.titulo}${it.observacion ? ` — <em>${it.observacion}</em>` : ''}</p>`;
+      });
+    });
+
+    const fecha = new Date().toLocaleString('es-AR');
+
+    for (const ed of emailsData) {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: ed.email,
+        checklist_nombre: checklistNombre,
+        operario: operarioNombre,
+        fecha: fecha,
+        porcentaje: porcentaje,
+        detalle: detalle
+      }, EMAILJS_PUBLIC_KEY);
+    }
+  } catch(e) { console.error('Error enviando emails:', e); }
+}
 
 async function enviarNotificacion(operarioNombre, porcentaje) {
   const emoji = porcentaje >= 90 ? '✅' : porcentaje >= 70 ? '⚠️' : '🚨';
@@ -1077,7 +1133,7 @@ async function cargarAdminChecklist() {
       }).join('');
 
   cont.innerHTML = `
-    <div style="display:grid; grid-template-columns:1fr 2fr; gap:12px; margin-bottom:8px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;">
       <!-- IZQUIERDA -->
       <div style="display:flex; flex-direction:column; gap:12px;">
         <div class="card" style="margin-bottom:0;">
@@ -1109,7 +1165,7 @@ async function cargarAdminChecklist() {
         </div>
         <div class="card" style="margin-bottom:0;">
           <h2 style="margin-bottom:12px;">📧 Emails por checklist</h2>
-          <select id="email-checklist-sel" style="margin-bottom:8px;">
+          <select id="email-checklist-sel" onchange="cargarEmailsChecklist(parseInt(this.value))" style="margin-bottom:8px;">
             <option value="">Seleccioná el checklist...</option>
             ${checklists.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}
           </select>
@@ -1118,12 +1174,73 @@ async function cargarAdminChecklist() {
           <div id="lista-emails" style="margin-top:8px;"></div>
         </div>
       </div>
-      <!-- DERECHA - MÁS ANCHA -->
+      <!-- DERECHA - IGUAL ANCHO -->
       <div class="card" style="margin-bottom:0; overflow-y:auto; max-height:85vh;">
         <h2 style="margin-bottom:12px;">📋 Estructura actual</h2>
-        <div id="items-lista">${listaHTML}</div>
+        <div id="items-lista">${await generarListaConEmails(checklists, sectores, items)}</div>
       </div>
     </div>`;
+}
+
+async function generarListaConEmails(checklists, sectores, items) {
+  // Cargar todos los emails
+  let emails = [];
+  try {
+    const data = await sbFetch('checklist_emails');
+    if (data) emails = data;
+  } catch(e) {}
+
+  if (!checklists.length) return `<div class="empty-state"><div class="icon">📋</div><p>No hay checklists todavía.</p></div>`;
+
+  return checklists.map(cl => {
+    const secsDeCl = sectores.filter(s => s.checklist_id === cl.id);
+    const emailsDeCl = emails.filter(e => e.checklist_id === cl.id);
+    const emailsHTML = emailsDeCl.length
+      ? `<div style="margin-top:6px; padding-top:6px; border-top:1px dashed #f0f0f0;">
+          <span style="font-size:0.72rem; color:#888;">📧 Notificar a: </span>
+          ${emailsDeCl.map(e => `<span style="font-size:0.72rem; background:#e3f2fd; color:#1565c0; padding:2px 6px; border-radius:8px; margin-left:4px;">${e.email}</span>`).join('')}
+        </div>`
+      : `<div style="margin-top:4px; font-size:0.72rem; color:#bbb;">📧 Sin emails configurados</div>`;
+
+    return `
+      <div style="margin-bottom:16px; border:2px solid #e65c00; border-radius:10px; padding:10px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <div style="background:#e65c00; color:white; padding:4px 12px; border-radius:12px; font-size:0.85rem; font-weight:700;">📋 ${cl.nombre}</div>
+          <button onclick="eliminarChecklist(${cl.id})" style="padding:2px 7px; border:none; border-radius:6px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
+        </div>
+        ${emailsHTML}
+        <div style="margin-top:8px;">
+        ${secsDeCl.length === 0
+          ? `<div style="font-size:0.8rem; color:#aaa; padding-left:8px;">Sin sectores</div>`
+          : secsDeCl.map(sec => {
+              const its = items.filter(i => i.sector_id === sec.id);
+              return `
+                <div style="margin-bottom:8px; padding-left:8px; border-left:3px solid #f9a825;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="font-size:0.82rem; font-weight:700; color:#e65c00;">📍 ${sec.nombre}</span>
+                    <button onclick="eliminarSector(${sec.id})" style="padding:1px 6px; border:none; border-radius:4px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.72rem;">🗑</button>
+                  </div>
+                  ${its.length === 0
+                    ? `<div style="font-size:0.75rem; color:#aaa; padding-left:8px;">Sin ítems</div>`
+                    : its.map((it, idx) => `
+                      <div class="informe-card" style="margin-bottom:4px; padding:8px;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <div style="display:flex; flex-direction:column; gap:1px;">
+                            <button onclick="moverItem(${it.id}, 'arriba')" style="padding:1px 4px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.7rem;" ${idx===0?'disabled':''}>▲</button>
+                            <button onclick="moverItem(${it.id}, 'abajo')" style="padding:1px 4px; border:none; border-radius:3px; background:#f0f0f0; cursor:pointer; font-size:0.7rem;" ${idx===its.length-1?'disabled':''}>▼</button>
+                          </div>
+                          <div style="flex:1; font-size:0.8rem;">${idx+1}. ${it.titulo}</div>
+                          <div style="display:flex; gap:3px;">
+                            <button onclick="editarItem(${it.id})" style="padding:2px 5px; border:none; border-radius:4px; background:#fff3e0; color:#e65c00; cursor:pointer; font-size:0.75rem;">✏️</button>
+                            <button onclick="eliminarItem(${it.id})" style="padding:2px 5px; border:none; border-radius:4px; background:#ffebee; color:#c62828; cursor:pointer; font-size:0.75rem;">🗑</button>
+                          </div>
+                        </div>
+                      </div>`).join('')}
+                </div>`;
+            }).join('')}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 async function agregarChecklist() {
@@ -1315,7 +1432,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v3.8 – 12/05/2026 12:30
+  v4.0 – 12/05/2026 18:00
 </div>
 
 </body>
