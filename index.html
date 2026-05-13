@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#e65c00" />
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -683,14 +684,15 @@ async function finalizarInforme() {
   const porcentaje = total > 0 ? Math.round((conformes / total) * 100) : 0;
   await enviarNotificacion(usuario.nombre, porcentaje);
 
-  // Enviar emails
+  // Enviar emails con PDF
   if (checklistSeleccionado) {
     await enviarEmailsInforme(
       usuario.nombre,
       checklistSeleccionado.nombre,
       checklistSeleccionado.id,
       porcentaje,
-      respuestas
+      respuestas,
+      firmaUrl
     );
   }
 
@@ -726,10 +728,135 @@ const EMAILJS_SERVICE_ID = 'service_27t3ueo';
 const EMAILJS_TEMPLATE_ID = 'template_1fcj5q8';
 const EMAILJS_PUBLIC_KEY = 'K_d0ZXqshwAeBO-ok';
 
-async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId, porcentaje, resps) {
+// ===== GENERAR PDF =====
+async function generarPDF(operarioNombre, checklistNombre, porcentaje, resps, firmaUrl) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const ancho = 210;
+  let y = 0;
+
+  // Header naranja
+  doc.setFillColor(230, 92, 0);
+  doc.rect(0, 0, ancho, 35, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Planeta Empanada', 15, 14);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Informe de Checklist de Cierre', 15, 22);
+  doc.setFontSize(10);
+  doc.text(new Date().toLocaleString('es-AR'), 15, 30);
+
+  y = 45;
+
+  // Info principal
+  doc.setTextColor(0, 0, 0);
+  doc.setFillColor(255, 243, 224);
+  doc.rect(10, y, ancho - 20, 22, 'F');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(230, 92, 0);
+  doc.text(`Checklist: ${checklistNombre}`, 15, y + 7);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Operario: ${operarioNombre}`, 15, y + 14);
+
+  // Porcentaje
+  const color = porcentaje >= 90 ? [76, 175, 80] : porcentaje >= 70 ? [255, 152, 0] : [244, 67, 54];
+  doc.setFillColor(...color);
+  doc.roundedRect(ancho - 55, y + 2, 45, 18, 3, 3, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${porcentaje}%`, ancho - 42, y + 14);
+
+  y += 30;
+
+  // Agrupar por sector
+  const sectoresMap = {};
+  resps.forEach(r => {
+    const sec = r.sector || 'General';
+    if (!sectoresMap[sec]) sectoresMap[sec] = [];
+    sectoresMap[sec].push(r);
+  });
+
+  Object.entries(sectoresMap).forEach(([secNombre, items]) => {
+    const secOk = items.filter(i => i.conforme).length;
+    const secPct = Math.round((secOk / items.length) * 100);
+
+    // Header sector
+    if (y > 260) { doc.addPage(); y = 15; }
+    doc.setFillColor(230, 92, 0);
+    doc.rect(10, y, ancho - 20, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`📍 ${secNombre}`, 14, y + 5.5);
+    doc.text(`${secPct}%`, ancho - 25, y + 5.5);
+    y += 10;
+
+    items.forEach(it => {
+      if (y > 265) { doc.addPage(); y = 15; }
+      const bgColor = it.conforme ? [232, 245, 233] : [255, 235, 238];
+      doc.setFillColor(...bgColor);
+      doc.rect(10, y, ancho - 20, 8, 'F');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      const estado = it.conforme ? '✓' : '✗';
+      doc.setTextColor(it.conforme ? 46 : 198, it.conforme ? 125 : 40, it.conforme ? 50 : 40);
+      doc.text(estado, 14, y + 5.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(it.titulo, 22, y + 5.5);
+      y += 9;
+
+      if (it.observacion) {
+        if (y > 265) { doc.addPage(); y = 15; }
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`  Obs: ${it.observacion}`, 22, y + 4);
+        y += 6;
+      }
+    });
+    y += 4;
+  });
+
+  // Firma
+  if (firmaUrl) {
+    if (y > 220) { doc.addPage(); y = 15; }
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Firma del operario:', 15, y + 5);
+    y += 8;
+    try {
+      doc.addImage(firmaUrl, 'PNG', 15, y, 80, 30);
+      y += 35;
+    } catch(e) {}
+  }
+
+  // Footer
+  doc.setFillColor(230, 92, 0);
+  doc.rect(0, 285, ancho, 12, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Planeta Empanada – Sistema de Control de Calidad', ancho / 2, 292, { align: 'center' });
+
+  return doc.output('datauristring');
+}
+
+async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId, porcentaje, resps, firmaUrl) {
   try {
     const emailsData = await sbFetch(`checklist_emails?checklist_id=eq.${checklistId}`);
     if (!emailsData || !emailsData.length) return;
+
+    // Generar PDF
+    let pdfDataUri = null;
+    try {
+      pdfDataUri = await generarPDF(operarioNombre, checklistNombre, porcentaje, resps, firmaUrl);
+    } catch(e) { console.error('Error generando PDF:', e); }
 
     const sectoresMap = {};
     resps.forEach(r => {
@@ -759,6 +886,7 @@ async function enviarEmailsInforme(operarioNombre, checklistNombre, checklistId,
         detalle: detalle
       }, EMAILJS_PUBLIC_KEY);
     }
+    console.log('Emails enviados correctamente');
   } catch(e) { console.error('Error enviando emails:', e); }
 }
 
@@ -1433,7 +1561,7 @@ cargarUsuariosDropdown();
 cargarItems();
 </script>
 <div style="position:fixed; bottom:8px; right:12px; font-size:0.7rem; color:#bbb; pointer-events:none;">
-  v4.2 – 13/05/2026 09:30
+  v4.3 – 13/05/2026 10:00
 </div>
 
 </body>
